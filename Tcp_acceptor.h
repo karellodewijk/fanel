@@ -69,8 +69,8 @@ Tcp_acceptor<Conection_type>::~Tcp_acceptor() {
     #ifdef THREADSAFE
         boost::unique_lock<boost::shared_mutex> lock(acceptors_mutex);
     #endif
-	for (std::multimap<int, tcp::acceptor*>::iterator it = acceptors.begin(); it != acceptors.end(); ++it)
-		delete it->second;
+    for (std::multimap<int, tcp::acceptor*>::iterator it = acceptors.begin(); it != acceptors.end(); ++it)
+        delete it->second;
     acceptors.clear();
 }
 
@@ -107,19 +107,19 @@ void Tcp_acceptor<Conection_type>::accept(int port) {
 template <class Conection_type>
 void Tcp_acceptor<Conection_type>::stop_accept(int port) {
     #ifdef THREADSAFE
-	    boost::upgrade_lock<boost::shared_mutex> lock(acceptors_mutex);
+        boost::upgrade_lock<boost::shared_mutex> lock(acceptors_mutex);
     #endif
     std::pair<std::map<int, tcp::acceptor*>::iterator, std::map<int, tcp::acceptor*>::iterator> it_range = acceptors.equal_range(port);
-	for (std::map<int, tcp::acceptor*>::iterator it = it_range.first; it != it_range.second;) {
-	    tcp::acceptor* acceptor = it->second;
-		{
-	        #ifdef THREADSAFE
-        	   boost::upgrade_to_unique_lock<boost::shared_mutex> uniqueLock(lock);
+    for (std::map<int, tcp::acceptor*>::iterator it = it_range.first; it != it_range.second;) {
+        tcp::acceptor* acceptor = it->second;
+        {
+            #ifdef THREADSAFE
+               boost::upgrade_to_unique_lock<boost::shared_mutex> uniqueLock(lock);
             #endif
-	        acceptors.erase(it++);
+            acceptors.erase(it++);
             delete acceptor;
-	    }
-	}
+        }
+    }
 }
 
 template <class Conection_type>
@@ -203,14 +203,14 @@ void Tcp_acceptor<Conection_type>::start_accept(std::pair<int, tcp::acceptor*>& 
     copyable_unique_ptr<Conection_type> connection(pConnection);
     acceptor.second->async_accept(pConnection->socket(),
         boost::bind(&Tcp_acceptor::handle_accept, this, acceptor, connection,
-            boost::asio::placeholders::error));	
+            boost::asio::placeholders::error));    
 }
 
 template <class Conection_type>
 void Tcp_acceptor<Conection_type>::handle_accept(std::pair<int, tcp::acceptor*> acceptor, copyable_unique_ptr<Conection_type> connection, const boost::system::error_code& error_code) {
     if (!error_code) {
         Conection_type* pConnection = connection.release();
-  	    pConnection->start();
+          pConnection->start();
         accepted(pConnection);        
     } else {
         error(error_code);
