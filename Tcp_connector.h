@@ -80,10 +80,10 @@ template <class Conection_type>
 void Tcp_connector<Conection_type>::handle_connect(copyable_unique_ptr<Conection_type> connection, const boost::system::error_code& error_code, tcp::resolver::iterator next_endpoint_iterator) {
   if (!error_code) {
       Conection_type* pConnection = connection.release();
-        pConnection->start();
+      pConnection->start();
       accepted(pConnection);
   } else {
-        tcp::resolver::iterator end;
+      tcp::resolver::iterator end;
       if (next_endpoint_iterator != end) {
           start_connect(next_endpoint_iterator); //we try again with the next endpoint
       } else {

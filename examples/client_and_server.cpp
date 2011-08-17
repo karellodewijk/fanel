@@ -5,48 +5,48 @@
 //accepts a connection and sends a welcome message
 class Connector_and_acceptor : public Tcp_connector_and_acceptor<> {
   public:
-	Connector_and_acceptor(boost::asio::io_service& io_service) : Tcp_connector_and_acceptor<>(io_service) {}
-	~Connector_and_acceptor() {
-	    for (std::set<Tcp_connection*>::iterator it = m_connections.begin(); it != m_connections.end(); ++it) {
-	        delete *it;
-	    } 
-	}
-	
-	//overload of the virtual function Tcp_acceptor::read, called any time a new connection is received
-	void accepted(Tcp_connection* connection) {
-		m_connections.insert(connection);
-		std::cout << "Connected" << std::endl;
-//		std::string hello_message = "012345678901234567890123456789012345678901234567890123456780123456789012345678901234567890123456789";
-//		hello_message += hello_message;
-//		hello_message += hello_message;
-//		hello_message += hello_message;
-//		hello_message += hello_message;
-//		hello_message += hello_message;
+    Connector_and_acceptor(boost::asio::io_service& io_service) : Tcp_connector_and_acceptor<>(io_service) {}
+    ~Connector_and_acceptor() {
+        for (std::set<Tcp_connection*>::iterator it = m_connections.begin(); it != m_connections.end(); ++it) {
+            delete *it;
+        } 
+    }
+    
+    //overload of the virtual function Tcp_acceptor::read, called any time a new connection is received
+    void accepted(Tcp_connection* connection) {
+        m_connections.insert(connection);
+        std::cout << "Connected" << std::endl;
+//        std::string hello_message = "012345678901234567890123456789012345678901234567890123456780123456789012345678901234567890123456789";
+//        hello_message += hello_message;
+//        hello_message += hello_message;
+//        hello_message += hello_message;
+//        hello_message += hello_message;
+//        hello_message += hello_message;
         std::string hello_message = "hfsdjklfhqsdfjksdhfkjlqsdhfjklsdqfhsdjkflhsdjkflsdhfjkldhfjkqsdhfsdjkqfhsdjklqfhqsdjklfhsdjkfhsdfkjlqsdhfjkldqshfsdjklfhsdjkflhqsdjkflhs";
-
-		connection->write(hello_message.c_str(), hello_message.length());
-		
         std::string hello_message2 = "";
 
-		connection->write(hello_message2.c_str(), hello_message2.length());
-	}
-	
-	void error(Tcp_connection* connection, const system::error_code& error_code) {
-	    delete connection;
-		m_connections.erase(connection);
-	}
-	
-	void error(const system::error_code& error_code) {
-		std::cout << "Received error: "<< error_code.message() << std::endl;
-	}
-	
-	
-	void received(Tcp_connection* connection, const char* data, int size) {
-		//std::cout << "Received message of size "<< size << std::endl;
-		std::cout << "Received message: " << std::string(data, size) << std::endl;
-	}
-	
-	std::set<Tcp_connection*> m_connections;
+        connection->write(hello_message.c_str(), hello_message.length());
+        connection->write(hello_message2.c_str(), hello_message2.length());
+        connection->write(hello_message.c_str(), hello_message.length());
+        connection->write(hello_message2.c_str(), hello_message.length());
+    }
+    
+    void error(Tcp_connection* connection, const system::error_code& error_code) {
+        delete connection;
+        m_connections.erase(connection);
+    }
+    
+    void error(const system::error_code& error_code) {
+        std::cout << "Received error: "<< error_code.message() << std::endl;
+    }
+    
+    
+    void received(Tcp_connection* connection, const char* data, int size) {
+        //std::cout << "Received message of size "<< size << std::endl;
+        std::cout << "Received message: " << std::string(data, size) << std::endl;
+    }
+    
+    std::set<Tcp_connection*> m_connections;
 };
 
 int main() {

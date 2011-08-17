@@ -189,7 +189,7 @@ using namespace std;
                 asio::placeholders::bytes_transferred));
       } 
       
-      void Tcp_connection::handle_read(const system::error_code& error, std::size_t bytes_transferred) {
+      void Tcp_connection::handle_read(const system::error_code& error_code, std::size_t bytes_transferred) {
           //this code is looks more complicated than it needs to be, this is because it implements
           //a semi-rotating buffer. semi because in order to deliver messages that occupy consecutive
           //memory, instead of wrapping around at the end, we move the current message to the front

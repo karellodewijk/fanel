@@ -32,8 +32,8 @@ public:
         case 0: return "Succes";
         case MAX_MESSAGE_SIZE_EXCEEDED: return "Maximum message size exceeded";
         #ifdef NETSTRING
-        case NETSTRING_MALFORMED_HEADER: return "Malformed netstringheader";
-        case NETSTRING_DELIMITER_NOT_FOUND: return "Netstring Delimiter not found";
+            case NETSTRING_MALFORMED_HEADER: return "Malformed netstringheader";
+            case NETSTRING_DELIMITER_NOT_FOUND: return "Netstring Delimiter not found";
         #endif
     }
   }
