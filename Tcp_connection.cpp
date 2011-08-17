@@ -13,6 +13,10 @@
 #include <iostream>
 #include <cmath>
 
+#ifdef NETSTRING
+#include <boost/lexical_cast.hpp>
+#endif
+
 //This is used as a sanity check for messages, largely to 
 //prevent DOS attacks that work by sending very large  
 //messages in order to starve the memory of the server
@@ -60,18 +64,27 @@ using namespace std;
 
   void Tcp_connection::write(const char* data, size_t size) {
     Buffer buffer;
-    #ifdef DELIMITER
+    #if defined(DELIMITER)
         buffer.size = size + sizeof(DELIMITER) - 1;
         buffer.data = (char*)malloc(buffer.size);
-      	memcpy(buffer.data, data, size); //copying data
-      	memcpy(buffer.data + size, DELIMITER, sizeof(DELIMITER)-1); //copying delimiter
+          memcpy(buffer.data, data, size); //copying data
+          memcpy(buffer.data + size, DELIMITER, sizeof(DELIMITER)-1); //copying delimiter
+    #elif defined(NETSTRING)
+        //write data with length prefix (DEFAULT)
+        std::string sizeStr(lexical_cast<std::string>(size));
+        sizeStr += ":";
+        buffer.size = size + sizeStr.length() + 1;
+        buffer.data = (char*)malloc(buffer.size);
+        memcpy(buffer.data, (char*)sizeStr.data(), sizeStr.length()); //copying size
+        memcpy(buffer.data + sizeStr.length(), data, size); //copying data
+        buffer.data[buffer.size-1] = ',';   
     #else
         //write data with length prefix (DEFAULT)
         buffer.size = size + HEADER_SIZE;
         buffer.data = (char*)malloc(buffer.size);
-      	uint32_t network_size = htonl(size); //to network byte order
-      	memcpy(buffer.data, (char*)&network_size, HEADER_SIZE); //copying size
-      	memcpy(buffer.data + HEADER_SIZE, data, size); //copying data
+        uint32_t network_size = htonl(size); //to network byte order
+        memcpy(buffer.data, (char*)&network_size, HEADER_SIZE); //copying size
+        memcpy(buffer.data + HEADER_SIZE, data, size); //copying data
     #endif
 
 
@@ -92,7 +105,7 @@ using namespace std;
     if (was_empty)
         asio::async_write(socket_, asio::buffer(buffer.data, buffer.size),
             bind(&Tcp_connection::handle_write, this,
-            	asio::placeholders::error));    
+                asio::placeholders::error));    
   }
   
   void Tcp_connection::received(const char* data, size_t size) {
@@ -108,17 +121,17 @@ using namespace std;
     #ifdef DELIMITER
         start_read();
     #else
-  	    start_read_header();
-  	#endif
+          start_read_header();
+      #endif
   } 
 
   Tcp_connection::~Tcp_connection() {
     //if (socket_.is_open())
     //    socket_.shutdown(asio::ip::tcp::socket::shutdown_both);
-  	for (std::deque<Buffer>::iterator it = write_queue.begin(); it != write_queue.end(); ++it) {
-  		free(it->data);
-  	}
-  	write_queue.clear();
+      for (std::deque<Buffer>::iterator it = write_queue.begin(); it != write_queue.end(); ++it) {
+          free(it->data);
+      }
+      write_queue.clear();
     free(m_readbuf);
   }
 
@@ -131,31 +144,31 @@ using namespace std;
             #ifdef THREADSAFE
                 boost::lock_guard<boost::mutex> lock(write_queue_mutex);
             #endif
-    	    if (!write_queue.empty()) {
-    	        old_buffer = write_queue.front();
-    	        write_queue.pop_front();
+            if (!write_queue.empty()) {
+                old_buffer = write_queue.front();
+                write_queue.pop_front();
             }
             is_empty = write_queue.empty();
             if (!is_empty)
                 new_buffer = write_queue.front();
-    	}
-    	
-    	//again we don't need the lock any more. Remember there is only one
-    	//thread writing at any given time. Either the queue was empty
-    	//and we take no further action so start_write can safely call an
-    	//async_write. Or the queue is not empty and start_write will still
-    	//keep all threads out.
-    	
-	  	if (!is_empty)
-			asio::async_write(socket_, asio::buffer(new_buffer.data, new_buffer.size),
-				bind(&Tcp_connection::handle_write, this,
-					asio::placeholders::error));
-					
-    	free(old_buffer.data); //basically it doesn't matter when we free the buffer, so we let everything performance critical take priority
-    	                  //not that I think freeing is that expensive but getting memory management out of the critical sections is 
-    	                  //always a good idea.
-	} else {
-      	error(error_code);
+        }
+        
+        //again we don't need the lock any more. Remember there is only one
+        //thread writing at any given time. Either the queue was empty
+        //and we take no further action so start_write can safely call an
+        //async_write. Or the queue is not empty and start_write will still
+        //keep all threads out.
+        
+          if (!is_empty)
+            asio::async_write(socket_, asio::buffer(new_buffer.data, new_buffer.size),
+                bind(&Tcp_connection::handle_write, this,
+                    asio::placeholders::error));
+                    
+        free(old_buffer.data); //basically it doesn't matter when we free the buffer, so we let everything performance critical take priority
+                          //not that I think freeing is that expensive but getting memory management out of the critical sections is 
+                          //always a good idea.
+    } else {
+          error(error_code);
     }
   }
   
@@ -163,13 +176,13 @@ using namespace std;
   //exactly one active reader. The only time a async_read call can start is at the
   //activation of the connection or if the last one finished.
   
-  #ifdef DELIMITER //code to read a messages seperated by a delimiter
+  #if defined(DELIMITER) //code to read a messages seperated by a delimiter
       void Tcp_connection::start_read() {
-	    m_readbuf = (char*)malloc(DEFAULT_BUFFER_SIZE);
-	    read_buffer_size = DEFAULT_BUFFER_SIZE;
-	    delimiter_progress = 0;
-	    read_progress = 0;
-	    message_start = m_readbuf;
+        m_readbuf = (char*)malloc(DEFAULT_BUFFER_SIZE);
+        read_buffer_size = DEFAULT_BUFFER_SIZE;
+        delimiter_progress = 0;
+        read_progress = 0;
+        message_start = m_readbuf;
         socket_.async_read_some(asio::mutable_buffers_1(m_readbuf, DEFAULT_BUFFER_SIZE),
             bind(&Tcp_connection::handle_read, this,
                 asio::placeholders::error,
@@ -249,9 +262,122 @@ using namespace std;
                   asio::placeholders::bytes_transferred));
                             
       }
-  #else //code to read a messages prefixed by the size as a binary 4 byte unsigned integer in network byte order (big endian)
+  #elif defined(NETSTRING)
+      const size_t max_header_size = lexical_cast<std::string>(MAX_MESSAGE_SIZE).length()+1;
+  
       void Tcp_connection::start_read_header() {
-	    m_readbuf = (char*)malloc(HEADER_SIZE);
+        m_readbuf = (char*)malloc(max_header_size);
+        header_progress = 0;
+        length_string = "";
+        socket_.async_read_some(asio::mutable_buffers_1(m_readbuf, max_header_size),
+            bind(&Tcp_connection::handle_read_header, this,
+                asio::placeholders::error,
+                asio::placeholders::bytes_transferred));
+      }
+      
+      void Tcp_connection::handle_read_header(const system::error_code& error_code, std::size_t bytes_transferred) {
+          // Netstrings prove suprisingly difficult to read asynchronously. 
+          // The big problem is that our standard method of reading
+          // just enough bytes to see how large it this doesn't work.
+          // So we use async_read_some with max_header_size as maximum
+          // But now we are in a situation where we might not have read enough
+          // (async_read_some gives no guarantees). Or we might have read too many
+          // a buffer of max_header_size can contain one or several complete 
+          // small netstrings or parts thereof.
+          
+          //basically I see two options, read one byte at the time while reading the
+          //header, this will allow for clean code.
+          //or well use this
+          
+          if (!error_code) {     
+              size_t read_until = header_progress + bytes_transferred;
+              while (header_progress < read_until) {
+                  if (m_readbuf[header_progress] == ':')
+                      break;
+                  else
+                      length_string += m_readbuf[header_progress];
+                  header_progress++;
+              }
+              
+              bool valid_header = (m_readbuf[header_progress] == ':');
+              size_t superfluous_data = read_until - header_progress - 1;
+                         
+              if (!valid_header) {
+                  if (header_progress < max_header_size) { //we might not have enough data
+                      socket_.async_read_some(asio::mutable_buffers_1(m_readbuf + header_progress, max_header_size - header_progress),
+                          bind(&Tcp_connection::handle_read_header, this,
+                              asio::placeholders::error,
+                              asio::placeholders::bytes_transferred));                 
+                  } else {
+                      free(m_readbuf);
+                      m_readbuf = 0;     
+                      error(boost::system::error_code(NETSTRING_MALFORMED_HEADER, cat));
+                  }
+              } else {
+                  try {
+                      size_t length = lexical_cast<int>(length_string);
+                      
+                      if (length > MAX_MESSAGE_SIZE) {
+                          error(boost::system::error_code(MAX_MESSAGE_SIZE_EXCEEDED, cat));
+                          free(m_readbuf);
+                          m_readbuf = 0;
+                          return;
+                      }
+                          
+                      //we align the beginning of the data with the beginning of the readbuffer TODO: this can avoided
+                      memmove(m_readbuf, m_readbuf + header_progress + 1, superfluous_data); 
+                      int still_to_read = length + 1 - superfluous_data;
+                      
+                      if (still_to_read <= 0) { //the whole message has allready has arrived
+                          if (m_readbuf[length] == ',')
+                              received(m_readbuf, length);
+                          memmove(m_readbuf, m_readbuf + length + 1, -still_to_read);
+                          header_progress = 0;
+                          length_string = "";
+                          handle_read_header(system::error_code(), -still_to_read); //call this again recursively for the next netstring
+                          return;
+                      }  
+                      
+                      m_readbuf = (char*)realloc(m_readbuf, length+2);
+                      
+                      asio::async_read(socket_, asio::mutable_buffers_1(m_readbuf + superfluous_data + 1, still_to_read),
+                          bind(&Tcp_connection::handle_read_body, this, length + 1,
+                              asio::placeholders::error));
+                              
+                  } catch (boost::bad_lexical_cast) {
+                      free(m_readbuf);
+                      m_readbuf = 0;     
+                      error(boost::system::error_code(NETSTRING_MALFORMED_HEADER, cat));
+                  }
+              }
+          } else {
+               free(m_readbuf);
+               m_readbuf = 0;     
+               error(error_code);
+          }
+      }
+      
+      void Tcp_connection::handle_read_body(size_t len, const system::error_code& error_code) {
+          if (!error_code) {
+              if (m_readbuf[len] == ',') {
+                  received(m_readbuf, len);
+                  free(m_readbuf);
+                  m_readbuf = 0;
+                  start_read_header();
+              } else {
+                  free(m_readbuf);
+                  m_readbuf = 0;
+                  error(boost::system::error_code(NETSTRING_DELIMITER_NOT_FOUND, cat));
+              }
+          } else {
+                free(m_readbuf);
+                m_readbuf = 0;
+                error(error_code);
+          }
+      }    
+  #else //code to read a messages prefixed by the size as a binary 4 byte unsigned integer in network byte order (big endian) or netstring
+      void Tcp_connection::start_read_header() {
+        m_readbuf = (char*)malloc(HEADER_SIZE);
         asio::async_read(socket_, asio::mutable_buffers_1(m_readbuf, HEADER_SIZE),
             bind(&Tcp_connection::handle_read_header, this,
                 asio::placeholders::error));
@@ -264,31 +390,31 @@ using namespace std;
                   error(boost::system::error_code(MAX_MESSAGE_SIZE_EXCEEDED, cat));
                   return;
               }
-              start_read_body(msg_len);
+              // m_readbuf already contains the header in its first HEADER_SIZE
+              // bytes. Expand it to fit in the body as well, and start async
+              // read into the body.
+              free(m_readbuf);
+              m_readbuf = (char*)malloc(msg_len);
+              asio::async_read(socket_, asio::mutable_buffers_1(m_readbuf, msg_len),
+                  bind(&Tcp_connection::handle_read_body, this, msg_len,
+                      asio::placeholders::error));
           } else {
-          	  error(error_code);
+                free(m_readbuf);
+                m_readbuf = 0;
+                error(error_code);
           }
       }
-
-      void Tcp_connection::start_read_body(unsigned msg_len) {
-          // m_readbuf already contains the header in its first HEADER_SIZE
-          // bytes. Expand it to fit in the body as well, and start async
-          // read into the body.
-          free(m_readbuf);
-          m_readbuf = (char*)malloc(msg_len);
-          asio::async_read(socket_, asio::mutable_buffers_1(m_readbuf, msg_len),
-              bind(&Tcp_connection::handle_read_body, this, msg_len,
-                  asio::placeholders::error));
-      } 
       
       void Tcp_connection::handle_read_body(size_t len, const system::error_code& error_code) {
           if (!error_code) {
               received(m_readbuf, len);
               free(m_readbuf);
-		      m_readbuf = 0;
-		      start_read_header();
+              m_readbuf = 0;
+              start_read_header();
           } else {
-          	  error(error_code);
+              free(m_readbuf);
+              m_readbuf = 0;
+              error(error_code);
           }
       }
   #endif

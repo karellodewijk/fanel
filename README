@@ -1,4 +1,4 @@
-This code is a thin wrapper around boost Asio, hopefully making efficiënt asynchronous network programming efficient and easy.
+This code is a thin wrapper around boost Asio, making efficient asynchronous tcp network connections easy.
 
 It handles the low-level asynchronous network code for you that is kind of tricky to get right and even trickier to get
 optimal performance. It offers an intuitive interface that should cover a lot of use cases especially if you have control
@@ -176,6 +176,13 @@ responsibility of the user to supply messages that do not contain the delimiter.
 
 The other compile flag is NETSTRING. If defined, the library will use NETSTRING encoding, read http://en.wikipedia.org/wiki/Netstring. 
 
+Socket options
+---------------
+
+To change socket options on connections, you can just call socket(), to get the underlying socket to change it. If you want to make changes to the socket options of
+connections before they are conected, then you can do this by subclassing Tcp_connection, put the things you need to do in the constructor, and pass your new connection type as a template parameter
+to Tcp_connector and Tcp_acceptor. They will now generate your connections.
+
 FAQ
 ----
    
@@ -210,10 +217,17 @@ A: The reason I don't return the pointers in smart pointer is because it is vira
    
 Q: Why all the precompiler flags ? precompiler flags are evil.
 A: By using precompiler flags, you don't compile what you don't need. And one of the focus points of this project was making it generally be more
-   efficient than rolling your own network code. 
+   efficient than rolling your own network code.
+
+Q: Is it thread safe ?
+A: Using different acceptors/connectors on different io_service is always threadsafe. You can compile the library with the compile flag THREADSAFE to
+   make the public interface and multiple event handlers on the same io_service threadsafe. It has however not yet been properly tested, so threat it as
+   experimental and inform me of the results.
+   
 -----
 
 Compile flags:
+
   Threads:
   
     THREADSAFE 

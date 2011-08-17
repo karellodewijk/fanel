@@ -20,15 +20,23 @@ class Connection_manager;
 using namespace boost;
 
 #define MAX_MESSAGE_SIZE_EXCEEDED 1
-class custom_network_error_category : public boost::system::error_category { 
+#ifdef NETSTRING
+    #define NETSTRING_MALFORMED_HEADER 2
+    #define NETSTRING_DELIMITER_NOT_FOUND 3
+#endif
+class custom_network_error_category : public boost::system::error_category {
 public:
-  const char *name() const { return "custom_network_error"; } 
+  const char *name() const { return "custom_network_error"; }
   std::string message(int ev) const { 
     switch (ev) {
         case 0: return "Succes";
         case MAX_MESSAGE_SIZE_EXCEEDED: return "Maximum message size exceeded";
+        #ifdef NETSTRING
+        case NETSTRING_MALFORMED_HEADER: return "Malformed netstringheader";
+        case NETSTRING_DELIMITER_NOT_FOUND: return "Netstring Delimiter not found";
+        #endif
     }
-  } 
+  }
 };
 
 /** \brief Tcp connection with an asynchronous message passing infrastructure build on top.
@@ -73,17 +81,22 @@ class Tcp_connection {
     void handle_write(const system::error_code& error);
     
     #ifdef DELIMITER
-    void start_read();
-    void handle_read(const system::error_code& error, std::size_t bytes_transferred );
-    size_t read_progress;
-    size_t read_buffer_size;
-    size_t delimiter_progress;
-    char* message_start;
+        void start_read();
+        void handle_read(const system::error_code& error, std::size_t bytes_transferred );
+        size_t read_progress;
+        size_t read_buffer_size;
+        size_t delimiter_progress;
+        char* message_start;
     #else    
-    void start_read_header();
-    void handle_read_header(const system::error_code& error);
-    void start_read_body(unsigned msg_len);
-    void handle_read_body(size_t size, const system::error_code& error);
+        void start_read_header();
+        #ifdef NETSTRING
+            void handle_read_header(const system::error_code& error, std::size_t bytes_transferred);
+            std::string length_string;
+            size_t header_progress;
+        #else
+            void handle_read_header(const system::error_code& error);
+        #endif
+        void handle_read_body(size_t size, const system::error_code& error);
     #endif
 
     asio::ip::tcp::socket socket_;

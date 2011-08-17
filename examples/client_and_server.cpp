@@ -16,13 +16,19 @@ class Connector_and_acceptor : public Tcp_connector_and_acceptor<> {
 	void accepted(Tcp_connection* connection) {
 		m_connections.insert(connection);
 		std::cout << "Connected" << std::endl;
-		std::string hello_message = "012345678901234567890123456789012345678901234567890123456780123456789012345678901234567890123456789";
-		hello_message += hello_message;
-		hello_message += hello_message;
-		hello_message += hello_message;
-		hello_message += hello_message;
-		hello_message += hello_message;
+//		std::string hello_message = "012345678901234567890123456789012345678901234567890123456780123456789012345678901234567890123456789";
+//		hello_message += hello_message;
+//		hello_message += hello_message;
+//		hello_message += hello_message;
+//		hello_message += hello_message;
+//		hello_message += hello_message;
+        std::string hello_message = "hfsdjklfhqsdfjksdhfkjlqsdhfjklsdqfhsdjkflhsdjkflsdhfjkldhfjkqsdhfsdjkqfhsdjklqfhqsdjklfhsdjkfhsdfkjlqsdhfjkldqshfsdjklfhsdjkflhqsdjkflhs";
+
 		connection->write(hello_message.c_str(), hello_message.length());
+		
+        std::string hello_message2 = "";
+
+		connection->write(hello_message2.c_str(), hello_message2.length());
 	}
 	
 	void error(Tcp_connection* connection, const system::error_code& error_code) {
@@ -36,7 +42,8 @@ class Connector_and_acceptor : public Tcp_connector_and_acceptor<> {
 	
 	
 	void received(Tcp_connection* connection, const char* data, int size) {
-		std::cout << "Received message of size "<< size << std::endl;
+		//std::cout << "Received message of size "<< size << std::endl;
+		std::cout << "Received message: " << std::string(data, size) << std::endl;
 	}
 	
 	std::set<Tcp_connection*> m_connections;
@@ -44,7 +51,7 @@ class Connector_and_acceptor : public Tcp_connector_and_acceptor<> {
 
 int main() {
 
-  try {
+  //try {
     boost::asio::io_service io_service;
     Connector_and_acceptor connector_and_acceptor(io_service);
     //open 2 accept channels and 2 connections on every channel.
@@ -63,8 +70,8 @@ int main() {
         io_service.poll();
         usleep(1000); //sleep 1 ms, sorry windows users, I think
     }
-  } catch (std::exception& e) {
-    std::cerr << e.what() << std::endl;
-  }
+  //} catch (std::exception& e) {
+  //  std::cerr << e.what() << std::endl;
+  //}
   return 0;
 }
