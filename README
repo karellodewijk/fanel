@@ -1,6 +1,6 @@
 This code is a thin wrapper around boost Asio, making efficient asynchronous tcp network connections easy.
 
-It handles the low-level asynchronous network code for you that is kind of tricky to get right and even trickier to get
+The library handles the low-level asynchronous network code for you that is kind of tricky to get right and even trickier to get
 optimal performance. It offers an intuitive interface that should cover a lot of use cases especially if you have control
 over both the server and the client.
 
@@ -67,14 +67,19 @@ Asynchronous programming uses callbacks to warn the user that any io data is rea
 In this case they go to the class Acceptor, derived from from Tcp_acceptor<>. (ignore the template <> for now)
 
 You have to overload the following 4 functions
+
   obligated:
+
 	1) virtual void accepted(Tcp_connection* connection) = 0;
 	2) virtual void error(Tcp_connection* connection, const boost::system::error_code& error) = 0;
 	3) virtual void received(Tcp_connection* connection, const char* data, int size) = 0;
+
   optional:
+
     4) virtual void error(const boost::system::error_code& error) {}
 
 And you can call the functions
+
 	5) void write(Tcp_connection* connection, const char* data, int size);
     6) void accept(int port);
     7) coid stop_accept(int port);
@@ -164,15 +169,15 @@ both connecting to servers as accepting connection, making it easy to create pee
 Network protocol and framing
 -----------------------------
 
-This library provides reliable end to end message transmissions over tcp. To support this, the library needs to know when one messages ends and another begins. Tcp does not provide this
-information, it is seen by the application as a constant stream of data. This is known as framing.
+This library provides reliable end to end message transmissions over tcp. To support this, the library needs to know when one messages ends and another begins, known as framing. 
+Tcp does not provide this information, it is seen by the application as a constant stream of data.
 
-By default it does this by sending the size of the coming message as a 4 byte binary unsigned int in network byte order (big endian). This is a variable that can be read across platorm
-with the hton (host to network long) and the ntol(network to host long). The message itself can be anything, text, binary data, whatever.
+By default the library uses a length prefix encoded as a 4 byte binary unsigned int in network byte order (big endian). This is a variable that can be read across platorm
+with the htol (host to network long) and the ntol(network to host long) calls. The message itself can be anything, text, binary data, whatever.
 
-But to provide the possibility to interopperate with some existing protols, it supports 2 compile flags that change this behaviour. The first is DELIMITER (in g++, use -DDELIMITER=\"::\" for a :: delimiter).
-If you define a value to this flag is will no longer send the size first but will instead add the given delimiter at the end of every message and remove it again at the other end. It is however now the
-responsibility of the user to supply messages that do not contain the delimiter. Or the other end reading the messages will falsely assume to split the message.
+To provide the possibility to interopperate with some existing protols, the library supports 2 compile flags that change this behaviour. The first is DELIMITER (in g++, use -DDELIMITER=\"::\" for a :: delimiter).
+If you define this delimiter, the library is will no longer send the size prefix first but will instead add the given delimiter at the end of every message and will remove it again at the other end. 
+It is however now the responsibility of the user to supply messages that do not contain the delimiter.
 
 The other compile flag is NETSTRING. If defined, the library will use NETSTRING encoding, read http://en.wikipedia.org/wiki/Netstring. 
 
