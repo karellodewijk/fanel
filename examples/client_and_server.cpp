@@ -28,7 +28,7 @@ class Connector_and_acceptor : public Tcp_connector_and_acceptor<> {
         connection->write(hello_message.c_str(), hello_message.length());
         connection->write(hello_message2.c_str(), hello_message2.length());
         connection->write(hello_message.c_str(), hello_message.length());
-        connection->write(hello_message2.c_str(), hello_message.length());
+        connection->write(hello_message2.c_str(), hello_message2.length());
     }
     
     void error(Tcp_connection* connection, const system::error_code& error_code) {
