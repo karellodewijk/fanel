@@ -89,7 +89,12 @@ custom_network_error_category Socket_connection<SocketType>::cat;
         buffer.data = (char*)malloc(buffer.size);
         memcpy(buffer.data, (char*)sizeStr.data(), sizeStr.length()); //copying size
         memcpy(buffer.data + sizeStr.length(), data, size); //copying data
-        buffer.data[buffer.size-1] = ',';   
+        buffer.data[buffer.size-1] = ',';
+    #elif defined(STREAMING)
+        //write raw data stream
+        buffer.size = size;
+        buffer.data = (char*)malloc(buffer.size);
+        memcpy(buffer.data, data, size); //copying data      
     #else
         //write data with length prefix (DEFAULT)
         buffer.size = size + 4;
@@ -125,7 +130,9 @@ custom_network_error_category Socket_connection<SocketType>::cat;
   {
     #ifdef DELIMITER
         start_read();
-    #else
+    #elif STREAMING
+        start_read();
+    #else //size prefix/netstring
         start_read_header();
     #endif
   } 
@@ -398,7 +405,32 @@ custom_network_error_category Socket_connection<SocketType>::cat;
                   error(error_code);
               }
           }
-      }    
+      }  
+  #elif defined(STREAMING)
+      template<class SocketType>
+      void Socket_connection<SocketType>::start_read() {
+        m_readbuf = (char*)malloc(DEFAULT_BUFFER_SIZE);
+        socket_.async_read_some(asio::mutable_buffers_1(m_readbuf, DEFAULT_BUFFER_SIZE),
+            bind(&Socket_connection::handle_read, this,
+                asio::placeholders::error,
+                asio::placeholders::bytes_transferred));
+      }
+      
+      template<class SocketType>
+      void Socket_connection<SocketType>::handle_read(const system::error_code& error_code, std::size_t bytes_transferred) {
+          if (!error_code) {  
+              received(m_readbuf, bytes_transferred);
+              free(m_readbuf);
+              m_readbuf = 0;
+              start_read();           
+          } else {
+              if (error_code != boost::asio::error::operation_aborted) {
+                  free(m_readbuf);
+                  m_readbuf = 0;
+                  error(error_code);
+              }
+          }
+      }
   #else //code to read a messages prefixed by the size as a binary 4 byte unsigned integer in network byte order (big endian) or netstring
       template<class SocketType>
       void Socket_connection<SocketType>::start_read_header() {

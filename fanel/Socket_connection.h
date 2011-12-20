@@ -93,15 +93,18 @@ class Socket_connection : public Connection {
         size_t read_buffer_size;
         size_t delimiter_progress;
         char* message_start;
-    #else    
+    #elif NETSTRING
         void start_read_header();
-        #ifdef NETSTRING
-            void handle_read_header(const system::error_code& error, std::size_t bytes_transferred);
-            std::string length_string;
-            size_t header_progress;
-        #else
-            void handle_read_header(const system::error_code& error);
-        #endif
+        void handle_read_header(const system::error_code& error, std::size_t bytes_transferred);
+        std::string length_string;
+        size_t header_progress;
+        void handle_read_body(size_t size, const system::error_code& error);
+    #elif STREAMING
+        void start_read();
+        void handle_read(const system::error_code& error, std::size_t bytes_transferred );
+    #else //default size_prefix
+        void start_read_header();
+        void handle_read_header(const system::error_code& error);
         void handle_read_body(size_t size, const system::error_code& error);
     #endif
 

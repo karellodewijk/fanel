@@ -32,6 +32,18 @@ set_target_properties(netstring_server netstring_client netstring_client_and_ser
                               COMPILE_FLAGS "-DNETSTRING"
                      )
 
+add_executable(streaming_client client.cpp)
+target_link_libraries(client ${LIBRARIES})
+add_executable(streaming_server server.cpp)
+target_link_libraries(server ${LIBRARIES})
+add_executable(streaming_client_and_server client_and_server.cpp)
+target_link_libraries(client_and_server ${LIBRARIES})
+
+set_target_properties(streaming_client streaming_server streaming_client_and_server 
+                      PROPERTIES 
+                              COMPILE_FLAGS "-DSTREAMING"
+                     )
+
 add_executable(ssl_client ssl_client_test.cpp)
 target_link_libraries(ssl_client ${LIBRARIES})
 add_executable(ssl_server ssl_server_test.cpp)

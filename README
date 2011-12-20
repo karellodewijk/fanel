@@ -95,10 +95,10 @@ And you can call the functions
 
 This is all there is to creating a high performance asynchronous network application.
 
+Client
+-------
 
-This code really shines when you are creating both a client and a server or a combination of both. If you think about it tcp clients and servers are not so different. Both generate
-the same bidirectional connections. The server by accepting connections and the client by connecting to a server(s). This library leverages this by providing an identical interface for
-both. The only differences between the server above and a client are.
+This code really shines when you are creating both a client and a server or a combination of both. If you think about it tcp clients and servers are not so different. Both generate the same bidirectional connections. The server by accepting connections and the client by connecting to a server(s). This library leverages this by providing an identical interface for both. The only differences between the server above and a client are.
 
     - You inherit from Tcp_connector<>
     - You call void connect(std::string servernamen, int port) rather than accept.
@@ -107,12 +107,8 @@ both. The only differences between the server above and a client are.
 
 So a client that will connect to the above server looks like this.
 
-Client
--------
-
-#include "Tcp_connection.h"
-#include "Tcp_connector.h"
-#include "Connection_manager.h"
+#include <fanel/Tcp_connection.h>
+#include <fanel/Tcp_connector.h>
 #include <set>
 #include <iostream>
 
@@ -163,30 +159,41 @@ int main() {
   return 0;
 }
 
-And through the magic of multiple inheritance, you can use both in the same application easily. by inheriting from Tcp_connector_and_acceptor<>. You can now generate new connection by
-both connecting to servers as accepting connection, making it easy to create peer applications.
+And through the magic of multiple inheritance, you can use both in the same application easily. by inheriting from Tcp_connector_and_acceptor<>. You can now generate new connection by both connecting to servers as accepting connection, making it easy to create peer applications.
+
+Ssl
+----
+
+When the code is compiled with -DUSE_SSL, Ssl_connector/Ssl_acceptor/Ssl_connection will now be availabale in <fanel/Ssl_connector.h>, <fanel/Ssl_acceptor.h> and <fanel/Ssl_connection.h>
+
+The interface is much the same than it's non-ssl counterparts with the exception of:
+
+Ssl_acceptor:
+    
+	8) void ssl_accept(int port, std::string certificate_file, std::string password = "");
+    9) ssl_set_certificate(std::string certificate_file, std::string password = "");    
+    10) ssl_accept(int port);
+    11) ssl_stop_accept(int port);
 
 Network protocol and framing
 -----------------------------
 
-This library provides reliable end to end message transmissions over tcp. To support this, the library needs to know when one messages ends and another begins, known as framing. 
-Tcp does not provide this information, it is seen by the application as a constant stream of data.
+This library provides reliable end to end message transmissions over tcp. To support this, the library needs to know when one messages ends and another begins, known as framing. Tcp does not provide this information, it is seen by the application as a constant stream of data.
 
-By default the library uses a length prefix encoded as a 4 byte binary unsigned int in network byte order (big endian). This is a variable that can be read across platorm
-with the htol (host to network long) and the ntol(network to host long) calls. The message itself can be anything, text, binary data, whatever.
+By default the library uses a length prefix encoded as a 4 byte binary unsigned int in network byte order (big endian). This is a variable that can be read across platorm with the htol (host to network long) and the ntol(network to host long) calls. The message itself can be anything, text, binary data, whatever.
 
-To provide the possibility to interopperate with some existing protols, the library supports 2 compile flags that change this behaviour. The first is DELIMITER (in g++, use -DDELIMITER=\"::\" for a :: delimiter).
-If you define this delimiter, the library is will no longer send the size prefix first but will instead add the given delimiter at the end of every message and will remove it again at the other end. 
-It is however now the responsibility of the user to supply messages that do not contain the delimiter.
+To provide the possibility to interopperate with some existing protols, the library supports 3 compile flags that change this behaviour. 
 
-The other compile flag is NETSTRING. If defined, the library will use NETSTRING encoding, read http://en.wikipedia.org/wiki/Netstring. 
+The first is DELIMITER (in g++, use -DDELIMITER=\"::\" for a :: delimiter). If you define this delimiter, the library will no longer send the size prefix first but will instead add the given delimiter at the end of every message and will remove it again at the other end. It is however now the responsibility of the user to supply messages that do not contain the delimiter.
+
+The second compile flag is NETSTRING (-DNETSTRING). If defined, the library will use NETSTRING encoding, read http://en.wikipedia.org/wiki/Netstring. 
+
+The Third is STREAMING (-DSTREAMING). If defined, the library will send data to the application as soon as it arrives. In this mode, no framing will be done. Note that this means that data send at one end can arrive at the other end in different size blocks. The total data stream will however arrive in order and exactly as it was sent.
 
 Socket options
 ---------------
 
-To change socket options on connections, you can just call socket(), to get the underlying socket to change it. If you want to make changes to the socket options of
-connections before they are conected, then you can do this by subclassing Tcp_connection, put the things you need to do in the constructor, and pass your new connection type as a template parameter
-to Tcp_connector and Tcp_acceptor. They will now generate your connections.
+To change socket options on connections, you can just call socket(), to get the underlying socket to change it. If you want to make changes to the socket options of connections before they are conected, then you can do this by subclassing Tcp_connection, put the things you need to do in the constructor, and pass your new connection type as a template parameter to Tcp_connector and Tcp_acceptor. They will now generate your connections.
 
 FAQ
 ----
@@ -203,31 +210,26 @@ A: Short answer: Yes
    One on ipv4 and one on ipv6. So again yes.
 
 Q: I'm getting a compiler error in Tcp_acceptor.h ?
-A: There is a bug in boost 1.42 and older that makes the upgrade_to_unique_lock not compile on gcc 4.5 and onwards. (like on ubuntu natty). upgrade to 
-   boost 1.46 or downgrade the compiler I guess.
+A: There is a bug in boost 1.42 and older that makes the upgrade_to_unique_lock not compile on gcc 4.5 and onwards. (like on ubuntu natty). upgrade to boost 1.47 or downgrade the compiler I guess.
 
 Q: What libraries do i need to link to, which headers should be in my include path, which compiler options do I need ?
-A: This library depends on boost asio and should therefor include boost_system (-L/usr/lib/ -lboost_system) and if you define THREADSAFE also, boost_thread. It also needs the boost headers in the include path.
-   It is also dependent on the next technical review. (-std=c++0x in gcc). See the Makefile in examples.
+A: In short, boost (system/regex/asio/threads), when compiled with -DUSE_SSL also openssl. 
 
 Q: Why did you not ship it as a shared library ?
-A: Two reasons, users should really take a look at the compile flags and only compile the options they need. Secondly the library is sort of header heavy due to some template usage so there wouldn't be much
+A: The behaviour of the library depends heavily on compiler options and templates.
+
+heavy due to some template usage so there wouldn't be much
    compiled code in the header.
    
 Q: The boost asio examples usually use shared pointers, why don't you ?
-A: The reason I don't return the pointers in smart pointer is because it is viral. Once a pointer is wrapped in a smart pointer, it is no longer possible to revert
-   to a regular pointer ever. Putting a pointer into a smart pointer is very easy. I wanted to give users the option not to use this. That being set, smart pointers
-   are a natural fit for event based programming. Event based programming puts more emphasis on paths of execution and less on objects and strict ownership. In fact
-   if you use at the implementation you will see smart pointers being used. Getting memory management right with boost asio without them is not easy.
+A: The reason I don't return the pointers in smart pointer is because it is viral. Once a pointer is wrapped in a smart pointer, it is no longer possible to revert to a regular pointer ever. Putting a pointer into a smart pointer is very easy. I wanted to give users the option not to use this. 
+That being set, smart pointers are a natural fit for event based programming. Event based programming puts more emphasis on paths of execution and less on objects and strict ownership. In fact if you use at the implementation you will see smart pointers being used. Getting memory management right with boost asio without them is not easy.
    
 Q: Why all the precompiler flags ? precompiler flags are evil.
-A: By using precompiler flags, you don't compile what you don't need. And one of the focus points of this project was making it generally be more
-   efficient than rolling your own network code.
+A: By using precompiler flags, you don't compile what you don't need. And one the focus of this project was making it more efficient than rolling your own network code.
 
 Q: Is it thread safe ?
-A: Using different acceptors/connectors on different io_service is always threadsafe. You can compile the library with the compile flag THREADSAFE to
-   make the public interface and multiple event handlers on the same io_service threadsafe. It has however not yet been properly tested, so threat it as
-   experimental and inform me of the results.
+A: Using different acceptors/connectors on different io_service is always threadsafe. You can compile the library with the compile flag THREADSAFE to  make the public interface and multiple event handlers on the same io_service threadsafe. It has however not yet been properly tested, so threat it as experimental and inform me of the results.
    
 -----
 
@@ -248,9 +250,11 @@ Compile flags:
   Network framing:
   
     DELIMITER=\":\"  
-        instead of the default length prefix framing, the network code will use the given delimiter
+        Instead of the default length prefix framing, the network code will use the given delimiter
     NETSTRING
-        instead of the default length prefix, the network code will use NETSTRING encoding, see http://en.wikipedia.org/wiki/Netstring
+        Instead of the default length prefix, the network code will use NETSTRING encoding, see http://en.wikipedia.org/wiki/Netstring
+    STREALING
+        The network code will do no framing
     
   Parameters:
     
@@ -269,4 +273,7 @@ Compile flags:
         only small, it will improve performance if you increase this value as we use a semi-rotating read buffer
         protocol and the less rotating the better.
                  
-        
+  Extras:
+
+    USE_SSL
+        When this option is on, you will be able to use Ssl_connection/Ssl_acceptor/Ssl_connector for ssl based communication
