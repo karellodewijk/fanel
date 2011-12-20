@@ -105,6 +105,14 @@ This code really shines when you are creating both a client and a server or a co
 
 1,2,3,4,5 are identical. Connectors also generate connections.   
 
+6 and 7 become:
+
+    6) void connect(std::string server, int port);
+    7) void stop_connect(std::string server, int port);
+
+6: Connect to a server
+7: Stop connecting to a server. !!!This does not terminate an allready active connection, it just stops a connection in progress but not yet established.
+
 So a client that will connect to the above server looks like this.
 
 #include <fanel/Tcp_connection.h>
@@ -166,14 +174,35 @@ Ssl
 
 When the code is compiled with -DUSE_SSL, Ssl_connector/Ssl_acceptor/Ssl_connection will now be availabale in <fanel/Ssl_connector.h>, <fanel/Ssl_acceptor.h> and <fanel/Ssl_connection.h>
 
-The interface is much the same than it's non-ssl counterparts with the exception of:
+The interface is much the same than it's non-ssl counterparts:
+
+1,2,3,4,5 are again identical. 
+
+instead of 6 and 7, we have:
 
 Ssl_acceptor:
     
-	8) void ssl_accept(int port, std::string certificate_file, std::string password = "");
-    9) ssl_set_certificate(std::string certificate_file, std::string password = "");    
+     8) void ssl_accept(int port, std::string certificate_file, std::string password = "");
+     9) ssl_set_certificate(std::string certificate_file, std::string password = "");    
     10) ssl_accept(int port);
     11) ssl_stop_accept(int port);
+
+Ssl_connector:
+
+	12) void ssl_connect(std::string server, int port, std::string certificate_file, std::string password = "");
+    13) ssl_set_certificate(std::string certificate_file, std::string password = "");    
+    14) ssl_connect(std::string server, int port);
+    15) ssl_stop_connect(std::string server, int port);
+
+ 8) Accept connections using the given file to get the certiificate + private key in pem format. If the certificate and/or private key is password protected, you must also supply the password.
+ 9) Set the certificate that all future calls to ssl_accept(port) will use (in pem format)
+10) Accept connections using the certificate set in ssl_set_certificate
+11) Stop accepting connections on the given port
+
+12) Connect to the given server and port using the certificate or certificate chain in the given certificate file  (in format supported by boost::asio::ssl::context::load_verify_file)
+13)  Set the certificate that all future calls to ssl_connect(std::string server, int port) will use (in format supported by boost::asio::ssl::context::load_verify_file)
+14) Connect using the certificate set in ssl_set_certificate
+15) Stop a connection in progress on given server and port. !!!This will not terminate established connections.
 
 Network protocol and framing
 -----------------------------
