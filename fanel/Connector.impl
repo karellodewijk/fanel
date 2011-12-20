@@ -1,0 +1,198 @@
+#include "Connection_manager.h"
+#include <stdexcept>
+
+#ifdef USE_SSL
+    #include "Ssl_PortConnector.h"
+    #include "Ssl_connection.h"
+    #include "Ssl_context_with_password.h"
+#else
+    #include "Tcp_PortConnector.h"
+    #include "Tcp_connection.h"
+#endif 
+
+//make 2 different classes based on condition compilation
+#ifdef USE_SSL
+    #define Connector Ssl_connector
+#else
+    #define Connector Tcp_connector
+#endif
+
+#ifdef USE_SSL
+    template <class Connection_type = Ssl_connection>
+#else
+    template <class Connection_type = Tcp_connection>
+#endif
+class Connector : public virtual Connection_manager {
+  public:
+    Connector(boost::asio::io_service& io_service);
+    ~Connector();
+  
+    #ifdef USE_SSL
+        ///connect ssl connections on the given port, certificate/private key will be loaded from the given file
+        void ssl_connect(const std::string& server, const int port, std::string certificate_file, std::string password = "");
+        
+        ///load the certificate/private key from file that all calls to ssl_connect(const int port) will use
+        void ssl_set_certificate(std::string certificate_file, std::string password = "");           
+        
+        ///connect to ssl connections in given port
+        ///@pre Certificate/private key should be initialized using ssl_set_certificate
+        void ssl_connect(const std::string& server, const int port);
+
+        ///stop ssl connection on the given port
+        void ssl_stop_connect(const std::string& server, const int port);
+    
+    #else
+    
+        ///start connecting connections on the given port
+        void connect(const std::string& server, const int port);
+        
+        ///stop connecting on the given port
+        void stop_connect(const std::string& server, const int port);
+        
+    #endif
+    
+  private:
+    
+    #ifdef USE_SSL
+        typedef Ssl_PortConnector<Connection_type> Port_connector_type;
+        std::shared_ptr<Ssl_context_with_password> pSsl_context;
+        #ifdef THREADSAFE
+            boost::shared_mutex shared_context_mutex;
+        #endif
+    #else
+        typedef Tcp_PortConnector<Connection_type> Port_connector_type;
+    #endif
+    
+    std::map<std::pair<std::string,int>, Port_connector_type*> port_connectors;
+
+    inline void add_connector(const std::string& server, const int port, Port_connector_type* new_port_connector);
+    inline void stop_connector(const std::string& server, const int port);
+    
+    #ifdef THREADSAFE
+        boost::shared_mutex port_connectors_mutex;
+    #endif
+       
+    boost::asio::io_service& io_service;
+};
+
+//implementation
+template <class Connection_type>
+Connector<Connection_type>::Connector(boost::asio::io_service& io_service_)
+  : io_service(io_service_)
+{}
+
+template <class Connection_type>
+Connector<Connection_type>::~Connector() {
+    #ifdef THREADSAFE
+        boost::unique_lock<boost::shared_mutex> lock(port_connectors_mutex);
+    #endif
+    for (auto it = port_connectors.begin(); it != port_connectors.end(); ++it) {
+        delete it->second;
+    }
+}
+
+template <class Connection_type>
+void Connector<Connection_type>::add_connector(const std::string& server, const int port, Port_connector_type* new_port_connector) {
+    {
+        #ifdef THREADSAFE
+            boost::upgrade_lock<boost::shared_mutex> lock(port_connectors_mutex);
+        #endif
+        auto key = std::make_pair(server, port);
+        if (port_connectors.find(key) != port_connectors.end()) {
+            delete new_port_connector;
+            std::cerr << "Duplicated bind on port " << port << ", ignored." << std::endl;
+            return;
+        }
+        #ifdef THREADSAFE
+            boost::upgrade_to_unique_lock<boost::shared_mutex> uniqueLock(lock);
+        #endif
+        port_connectors[key] = new_port_connector;
+    }
+    new_port_connector->start();
+}
+
+template <class Connection_type>
+void Connector<Connection_type>::stop_connector(const std::string& server, const int port) {
+    Port_connector_type* old_connector;
+    {
+        #ifdef THREADSAFE
+            boost::upgrade_lock<boost::shared_mutex> lock(port_connectors_mutex);
+        #endif
+        auto key = std::make_pair(server, port);
+        auto connector_it = port_connectors.find(key); 
+        if (connector_it == port_connectors.end()) {
+            std::cerr << "Stopping connect on port " << port << ", but no connect was in progress." << std::endl;
+            return;
+        }
+        old_connector = connector_it->second;
+        #ifdef THREADSAFE
+            boost::upgrade_to_unique_lock<boost::shared_mutex> uniqueLock(lock);
+        #endif
+        port_connectors.erase(key);
+    }
+    delete old_connector; //delete outside locked section
+}
+
+#ifdef USE_SSL
+    template <class Connection_type>
+    void Connector<Connection_type>::ssl_connect(const std::string& server, 
+                                                 const int port, 
+                                                 std::string certificate_file, 
+                                                 std::string password) {
+
+        std::unique_ptr<Ssl_context_with_password> ssl_context(new Ssl_context_with_password(boost::asio::ssl::context::sslv23, password));
+        ssl_context->set_verify_mode(boost::asio::ssl::verify_peer);
+        ssl_context->load_verify_file(certificate_file);
+
+        Port_connector_type* new_port_connector = 
+            new Port_connector_type(io_service, *this, server, port, 
+                                    std::bind(&Connector<Connection_type>::stop_connector, this, server, port), 
+                                    std::move(ssl_context));
+        add_connector(server, port, new_port_connector);
+    }
+
+    template <class Connection_type>
+    void Connector<Connection_type>::ssl_connect(const std::string& server, const int port) {
+        #ifdef THREADSAFE
+            boost::shared_lock<boost::shared_mutex> lock(shared_context_mutex);
+        #endif
+        if (!pSsl_context) throw std::runtime_error("Ssl context not initialized");
+        Port_connector_type* new_port_connector = 
+            new Port_connector_type(io_service, *this, port, 
+                                    std::bind(&Connector<Connection_type>::stop_connector, this, server, port),
+                                    pSsl_context);
+        add_connector(port, new_port_connector);
+    }
+    
+    template <class Connection_type>
+    void Connector<Connection_type>::ssl_set_certificate(std::string certificate_file, std::string password) {
+        #ifdef THREADSAFE
+            boost::unique_lock<boost::shared_mutex> lock(shared_context_mutex);
+        #endif
+        pSsl_context = new Ssl_context_with_password(boost::asio::ssl::context::sslv23, password);
+        pSsl_context->set_verify_mode(boost::asio::ssl::verify_peer);
+        pSsl_context->load_verify_file(certificate_file);
+    }
+
+    template <class Connection_type>
+    void Connector<Connection_type>::ssl_stop_connect(const std::string& server, const int port) {
+        stop_connector(server, port);
+    }
+
+#else
+    template <class Connection_type>
+    void Connector<Connection_type>::connect(const std::string& server, const int port) {
+        Port_connector_type* new_port_connector = 
+            new Port_connector_type(io_service, *this, server, port, 
+                                    std::bind(&Connector<Connection_type>::stop_connector, this, server, port));
+        add_connector(server, port, new_port_connector);
+    }
+
+    template <class Connection_type>
+    void Connector<Connection_type>::stop_connect(const std::string& server, const int port) {
+        stop_connector(server, port);
+    }
+#endif
+
+#undef Connector
+

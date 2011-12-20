@@ -1,0 +1,187 @@
+#include "Connection_manager.h"
+#include <stdexcept>
+
+#ifdef USE_SSL
+    #include "Ssl_PortAcceptor.h"
+    #include "Ssl_connection.h"
+    #include "Ssl_context_with_password.h"
+#else
+    #include "Tcp_PortAcceptor.h"
+    #include "Tcp_connection.h"
+#endif 
+
+//make 2 different classes based on condition compilation
+#ifdef USE_SSL
+    #define Acceptor Ssl_acceptor
+#else
+    #define Acceptor Tcp_acceptor
+#endif
+
+#ifdef USE_SSL
+    template <class Connection_type = Ssl_connection>
+#else
+    template <class Connection_type = Tcp_connection>
+#endif
+class Acceptor : public virtual Connection_manager {
+  public:
+    Acceptor(boost::asio::io_service& io_service);
+    ~Acceptor();
+  
+    #ifdef USE_SSL
+        ///start accepting ssl connections on the given port, certificate/private key will be loaded from the given file
+        void ssl_accept(int port, std::string certificate_file, std::string password = "");
+        
+        ///load the certificate/private key from file that all calls to ssl_accept(int port) will use
+        void ssl_set_certificate(std::string certificate_file, std::string password = "");           
+        
+        ///accept ssl connections in given port
+        ///@pre Certificate/private key should be initialized using ssl_set_certificate
+        void ssl_accept(int port);
+        
+        ///stop accepting ssl connections on the given port
+        void ssl_stop_accept(int port);
+    
+    #else
+    
+        ///start accepting connections on the given port
+        void accept(int port);
+        
+        ///stop accepting connections on the given port
+        void stop_accept(int port);
+        
+    #endif
+    
+  private:
+    
+    #ifdef USE_SSL
+        typedef Ssl_PortAcceptor<Connection_type> Port_acceptor_type;
+        std::shared_ptr<Ssl_context_with_password> pSsl_context;
+        #ifdef THREADSAFE
+            boost::shared_mutex shared_context_mutex;
+        #endif
+    #else
+        typedef Tcp_PortAcceptor<Connection_type> Port_acceptor_type;
+    #endif
+    
+    std::map<int, Port_acceptor_type*> port_acceptors;
+
+    inline void add_acceptor(int& port, Port_acceptor_type* new_port_acceptor);
+    inline void stop_acceptor(int& port);
+    
+    #ifdef THREADSAFE
+        boost::shared_mutex port_acceptors_mutex;
+    #endif
+       
+    boost::asio::io_service& io_service;
+};
+
+//implementation
+template <class Connection_type>
+Acceptor<Connection_type>::Acceptor(boost::asio::io_service& io_service_)
+  : io_service(io_service_)
+{}
+
+template <class Connection_type>
+Acceptor<Connection_type>::~Acceptor() {
+    #ifdef THREADSAFE
+        boost::unique_lock<boost::shared_mutex> lock(port_acceptors_mutex);
+    #endif
+    for (auto it = port_acceptors.begin(); it != port_acceptors.end(); ++it) {
+        delete it->second;
+    }
+}
+
+template <class Connection_type>
+void Acceptor<Connection_type>::add_acceptor(int& port, Port_acceptor_type* new_port_acceptor) {
+    {
+        #ifdef THREADSAFE
+            boost::upgrade_lock<boost::shared_mutex> lock(port_acceptors_mutex);
+        #endif
+        if (port_acceptors.find(port) != port_acceptors.end()) {
+            delete new_port_acceptor;
+            std::cerr << "Duplicated bind on port " << port << ", ignored." << std::endl;
+            return;
+        }
+        #ifdef THREADSAFE
+            boost::upgrade_to_unique_lock<boost::shared_mutex> uniqueLock(lock);
+        #endif
+        port_acceptors[port] = new_port_acceptor;
+    }
+    new_port_acceptor->start();
+}
+
+template <class Connection_type>
+void Acceptor<Connection_type>::stop_acceptor(int& port) {
+    Port_acceptor_type* old_acceptor;
+    {
+        #ifdef THREADSAFE
+            boost::upgrade_lock<boost::shared_mutex> lock(port_acceptors_mutex);
+        #endif
+        if (port_acceptors.find(port) == port_acceptors.end()) {
+            std::cerr << "Stopping accept on port " << port << ", but it was not bound." << std::endl;
+            return;
+        }
+        old_acceptor = port_acceptors[port];
+        #ifdef THREADSAFE
+            boost::upgrade_to_unique_lock<boost::shared_mutex> uniqueLock(lock);
+        #endif
+        port_acceptors.erase(port);
+    }
+    delete old_acceptor; //delete outside locked section
+}
+
+#ifdef USE_SSL
+    template <class Connection_type>
+    void Acceptor<Connection_type>::ssl_accept(int port, std::string certificate_file, std::string password) {
+        std::unique_ptr<Ssl_context_with_password> ssl_context(new Ssl_context_with_password(boost::asio::ssl::context::sslv23, password));
+        ssl_context->set_options(boost::asio::ssl::context::default_workarounds
+                                | boost::asio::ssl::context::no_sslv2);
+        ssl_context->use_certificate_chain_file(certificate_file);
+        ssl_context->use_private_key_file(certificate_file, boost::asio::ssl::context::pem);
+
+        Port_acceptor_type* new_port_acceptor = new Port_acceptor_type(io_service, *this, port, std::move(ssl_context));
+        add_acceptor(port, new_port_acceptor);
+    }
+
+    template <class Connection_type>
+    void Acceptor<Connection_type>::ssl_accept(int port) {
+        #ifdef THREADSAFE
+            boost::shared_lock<boost::shared_mutex> lock(shared_context_mutex);
+        #endif
+        if (!pSsl_context) throw std::runtime_error("Ssl context not initialized");
+        Port_acceptor_type* new_port_acceptor = new Port_acceptor_type(io_service, *this, port, pSsl_context);
+        add_acceptor(port, new_port_acceptor);
+    }
+    
+    template <class Connection_type>
+    void Acceptor<Connection_type>::ssl_set_certificate(std::string certificate_file, std::string password) {
+        #ifdef THREADSAFE
+            boost::unique_lock<boost::shared_mutex> lock(shared_context_mutex);
+        #endif
+        pSsl_context = new Ssl_context_with_password(boost::asio::ssl::context::sslv23, password);
+        pSsl_context->set_options(boost::asio::ssl::context::default_workarounds
+                                 | boost::asio::ssl::context::no_sslv2);
+        pSsl_context->use_certificate_chain_file(certificate_file);
+        pSsl_context->use_private_key_file(certificate_file, boost::asio::ssl::context::pem);
+    }     
+    
+    template <class Connection_type>
+    void Acceptor<Connection_type>::ssl_stop_accept(int port) {
+       stop_acceptor(port);
+    }
+    
+#else
+    template <class Connection_type>
+    void Acceptor<Connection_type>::accept(int port) {
+        Port_acceptor_type* new_port_acceptor = new Port_acceptor_type(io_service, *this, port); //alloc outside locked section
+        add_acceptor(port, new_port_acceptor);
+    }
+
+    template <class Connection_type>
+    void Acceptor<Connection_type>::stop_accept(int port) {
+        stop_acceptor(port);
+    }
+#endif
+
+#undef Acceptor
+

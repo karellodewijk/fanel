@@ -1,0 +1,250 @@
+#include <boost/asio.hpp>
+#include <boost/bind.hpp>
+#include <boost/lexical_cast.hpp>
+#include <set>
+#include <map>
+#include <memory>
+
+#ifdef THREADSAFE
+#include <boost/thread/shared_mutex.hpp>
+#endif
+
+#ifdef USE_SSL
+    #include <boost/asio/ssl.hpp>
+    #include "Ssl_connection.h"
+    #include "Ssl_context_with_password.h"
+#else
+    #include "Tcp_connection.h"
+#endif
+
+#include "Connection_manager.h"
+#include "copyable_unique_ptr.h"
+
+using namespace boost::asio;
+using boost::asio::ip::tcp;
+
+/** \brief This is a class to create listeners on one or more ports asynchronously.
+ *
+ * After initialisation, call accept(port number) to receive connections
+ * over a port. It is allowed to call this function more than once with
+ * different port numbers. It will then create listeners and accept connections
+ * on all ports. 
+ *
+ * The template parameter is the connection type the class
+ * should create and should either be Tcp_connection or descend from it.
+ *
+ */
+
+//make 2 different classes based on condition compilation
+#ifdef USE_SSL
+    #define PortAcceptor Ssl_PortAcceptor
+#else
+    #define PortAcceptor Tcp_PortAcceptor
+#endif
+
+#ifdef USE_SSL
+    template <class Connection_type = Ssl_connection>
+#else
+    template <class Connection_type = Tcp_connection>
+#endif
+class PortAcceptor {
+  public:
+    ~PortAcceptor();
+    
+    void start();
+    boost::asio::io_service& get_io_service();
+    
+
+    #ifdef USE_SSL
+        PortAcceptor(boost::asio::io_service& io_service, Connection_manager& connection_manager, int port, std::shared_ptr<Ssl_context_with_password> ssl_context); 
+    #else
+        PortAcceptor(boost::asio::io_service& io_service, Connection_manager& connection_manager, int port);
+    #endif
+    
+private:
+    #ifdef USE_SSL
+        void handle_handshake(copyable_unique_ptr<Connection_type> connection, const boost::system::error_code& error_code);
+        std::shared_ptr<Ssl_context_with_password> ssl_context;
+    #endif
+
+    void start_accept();
+    void start_acceptor(tcp::resolver::iterator endpoint_iterator);
+    void handle_accept(copyable_unique_ptr<Connection_type> connection, const boost::system::error_code& error);
+    void handle_resolve(const boost::system::error_code& error, tcp::resolver::iterator endpoint_iterator);
+  
+    tcp::acceptor* acceptor;
+    tcp::resolver* resolver;
+    
+    int port;
+    Connection_manager& connection_manager;
+    boost::asio::io_service& io_service;
+};
+
+template <class Connection_type>
+void PortAcceptor<Connection_type>::start() {
+    //do not try to integrate/call this function into/from the constructor, this creates can create a race condition in multithread enviroments 
+    //where an event might trigger before the object is created
+    
+    tcp::resolver::query query(boost::lexical_cast<std::string>(port));
+    resolver = new tcp::resolver(io_service);
+    
+    resolver->async_resolve(query,
+        boost::bind(&PortAcceptor::handle_resolve, this,
+            boost::asio::placeholders::error, 
+            boost::asio::placeholders::iterator));
+}
+
+template <class Connection_type>
+PortAcceptor<Connection_type>::~PortAcceptor() {
+    delete acceptor;
+    if (resolver) {
+        resolver->cancel();
+        delete resolver;
+    }
+}
+
+template <class Connection_type>
+boost::asio::io_service& PortAcceptor<Connection_type>::get_io_service() {
+    return io_service;
+}
+
+#ifdef USE_SSL
+    template <class Connection_type>
+    PortAcceptor<Connection_type>::PortAcceptor(boost::asio::io_service& io_service_, Connection_manager& connection_manager_, int port_, std::shared_ptr<Ssl_context_with_password> ssl_context_) 
+        :io_service(io_service_)
+        ,connection_manager(connection_manager_)
+        ,ssl_context(ssl_context_)
+        ,port(port_)
+        ,acceptor(0)
+        ,resolver(0)
+    {}
+    
+    template <class Connection_type>
+    void PortAcceptor<Connection_type>::handle_handshake(copyable_unique_ptr<Connection_type> connection, const boost::system::error_code& error_code) {
+        if (!error_code) {
+            Connection_type* pConnection = connection.release();
+            connection_manager.accepted(pConnection);
+            pConnection->start();
+        } else {
+            if (error_code != boost::asio::error::operation_aborted)
+                connection_manager.error(error_code);
+        }
+    }
+    
+#else
+    template <class Connection_type>
+    PortAcceptor<Connection_type>::PortAcceptor(boost::asio::io_service& io_service_, Connection_manager& connection_manager_, int port_) 
+        :io_service(io_service_)
+        ,connection_manager(connection_manager_)
+        ,port(port_)
+        ,acceptor(0)
+    {}
+#endif
+
+template <class Connection_type>
+void PortAcceptor<Connection_type>::handle_resolve(const boost::system::error_code& error_code, tcp::resolver::iterator endpoint_iterator) {
+    if (!error_code) {
+        start_acceptor(endpoint_iterator);
+        delete resolver;
+        resolver = 0;
+    } else {
+        if (error_code != boost::asio::error::operation_aborted)
+            connection_manager.error(error_code);
+    }
+}
+
+template <class Connection_type>
+void PortAcceptor<Connection_type>::start_acceptor(tcp::resolver::iterator endpoint_iterator) {
+    tcp::resolver::iterator end;
+    if (endpoint_iterator != end) {
+        acceptor = new tcp::acceptor(io_service);
+        boost::asio::ip::tcp::endpoint endpoint = *endpoint_iterator;
+        boost::system::error_code open_error;
+        acceptor->open(endpoint.protocol(), open_error);
+        if (open_error) {
+            connection_manager.error(open_error);
+            return;
+        }
+        boost::system::error_code option_error;
+        acceptor->set_option(boost::asio::ip::tcp::acceptor::reuse_address(true), option_error);
+        if (option_error) {
+            connection_manager.error(option_error);
+            return;
+        }                             
+        boost::system::error_code bind_error;
+        acceptor->bind(*endpoint_iterator, bind_error);
+        if (bind_error) {
+            connection_manager.error(bind_error);
+            return;
+        }
+        boost::system::error_code listen_error;
+        acceptor->listen(boost::asio::socket_base::max_connections, listen_error);
+        if (listen_error) {
+            connection_manager.error(listen_error);
+            return;
+        }
+        start_accept();
+        
+        /*
+        //This part is basically to create an ipv4 listener if we have an ipv6 listener which only supports ipv6. Most modern
+        //Os's can actually accept ipv4 conections with an ipv6 listener and will not run this code.
+        
+        bool ipv6_only = false;
+        boost::asio::ip::v6_only v6_only;
+        if (endpoint_iterator->endpoint().address().is_v6()) {
+            acceptor->get_option(v6_only);
+            bool ipv6_only = v6_only.value();
+        }
+        
+        if (ipv6_only && !acceptor_ipv4) { //our connection is a ipv6 only, so open another acceptor on ipv4 (dual stack approach)
+            tcp::resolver::iterator next_endpoint_iterator = ++endpoint_iterator;
+            tcp::resolver::iterator end;
+            if (next_endpoint_iterator != end) { //we have another endpoint, probably ipv4
+                acceptor_ipv4 = new tcp::acceptor(io_service);
+                start_acceptor(acceptor_ipv4, next_endpoint_iterator);
+            } else {} //we have no other endpoint. I guess this is the future and ipv4 compatability is no longer available
+        }
+        */
+    }
+}
+
+template <class Connection_type>
+void PortAcceptor<Connection_type>::start_accept() {
+    #ifdef USE_SSL
+        Connection_type* pConnection = new Connection_type(io_service, *ssl_context, connection_manager);
+    #else
+        Connection_type* pConnection = new Connection_type(io_service, connection_manager);
+    #endif
+    copyable_unique_ptr<Connection_type> connection(pConnection);
+    acceptor->async_accept(pConnection->socket().lowest_layer(),
+        boost::bind(&PortAcceptor::handle_accept, this, std::move(connection),
+            boost::asio::placeholders::error)); 
+}
+
+template <class Connection_type>
+void PortAcceptor<Connection_type>::handle_accept(copyable_unique_ptr<Connection_type> connection, const boost::system::error_code& error_code) {
+    if (!error_code) {
+        //restart the acceptor, this takes precedence so we don't have to wait for this call to finish to accept a new connection
+        start_accept();
+        #ifdef USE_SSL
+            Connection_type* pConnection = connection.get();
+            //Certainly violating unique ptr here. We use it to get the socket and call async_handshake on it and we pass it as a parameter
+            //It is ok here as the handshake event cannot trigger before the call to async_handshake has completed, I hope.
+            pConnection->socket().async_handshake(boost::asio::ssl::stream_base::server,
+                boost::bind(&PortAcceptor::handle_handshake, this, std::move(connection),
+                    boost::asio::placeholders::error));
+        #else
+            //if we don't use SSL the connection is now ready
+            Connection_type* pConnection = connection.release();
+            pConnection->start();
+            connection_manager.accepted(pConnection);
+        #endif
+    } else {
+        if (error_code != boost::asio::error::operation_aborted)
+            connection_manager.error(error_code);
+    }
+}
+
+#undef PortAcceptor
+
+

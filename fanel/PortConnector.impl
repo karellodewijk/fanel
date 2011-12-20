@@ -1,0 +1,226 @@
+#include <boost/asio.hpp>
+#include <boost/bind.hpp>
+#include <boost/lexical_cast.hpp>
+#include <set>
+#include <functional>
+#include "copyable_unique_ptr.h"
+#include "Connection_manager.h"
+
+using boost::asio::ip::tcp;
+
+#ifdef USE_SSL
+    #include <boost/asio/ssl.hpp>
+    #include "Ssl_connection.h"
+    #include "Ssl_context_with_password.h"
+#else
+    #include "Tcp_connection.h"
+#endif
+
+//make 2 different classes based on condition compilation
+#ifdef USE_SSL
+    #define PortConnector Ssl_PortConnector
+#else
+    #define PortConnector Tcp_PortConnector
+#endif
+
+/** \brief This is a class to one or more servers and ports asynchronously
+ *
+ * After initialisation, call connect(server, port) to connect. You can connect
+ * to multiple servers or multiple ports on the same server or both.
+ *
+ * !!!This class manages it's own lifetime and will cease to be (delete this suicide) when it has served it's purpose
+ */
+
+#ifdef USE_SSL
+    template <class Connection_type = Ssl_connection>
+#else
+    template <class Connection_type = Tcp_connection>
+#endif
+class PortConnector {
+
+  public:
+    PortConnector(boost::asio::io_service& io_service);
+    ~PortConnector();
+    
+    void start();
+    boost::asio::io_service& get_io_service();
+    
+    #ifdef USE_SSL
+        PortConnector(boost::asio::io_service& io_service, 
+                      Connection_manager& connection_manager_, 
+                      const std::string& server, 
+                      int port, 
+                      std::function<void()> connected_callback,
+                      std::shared_ptr<Ssl_context_with_password> ssl_context);
+
+    #else
+        PortConnector(boost::asio::io_service& io_service, 
+                      Connection_manager& connection_manager_, 
+                      const std::string& server, 
+                      int port,
+                      std::function<void()> connected_callback);
+    #endif
+
+  private:
+    void handle_resolve(const boost::system::error_code& error_code, tcp::resolver::iterator endpoint_iterator);
+    void start_connect(tcp::resolver::iterator endpoint_iterator);  
+    void handle_connect(copyable_unique_ptr<Connection_type> connection, 
+                        const boost::system::error_code& error_code, 
+                        tcp::resolver::iterator next_endpoint_iterator);
+
+    #ifdef USE_SSL
+        void handle_handshake(copyable_unique_ptr<Connection_type> connection, const boost::system::error_code& error_code);
+        std::shared_ptr<Ssl_context_with_password> ssl_context;
+    #endif
+
+    Connection_manager& connection_manager;
+    boost::asio::io_service& io_service;
+    tcp::resolver* resolver;
+    int port;
+    std::string server;
+    std::function<void()> connected_callback;
+};
+
+//implementation
+
+template <class Connection_type>
+PortConnector<Connection_type>::~PortConnector() {
+    if (resolver) {
+        resolver->cancel();
+        delete resolver;
+    }
+}
+
+#ifdef USE_SSL
+    template <class Connection_type>
+    PortConnector<Connection_type>::PortConnector(
+            boost::asio::io_service& io_service_, 
+            Connection_manager& connection_manager_, 
+            const std::string& server_, 
+            int port_, 
+            std::function<void()> connected_callback_,
+            std::shared_ptr<Ssl_context_with_password> ssl_context_)
+        :io_service(io_service_)
+        ,connection_manager(connection_manager_)
+        ,ssl_context(ssl_context_)
+        ,port(port_)
+        ,connected_callback(connected_callback_)
+        ,server(server_)
+        ,resolver(0)
+    {}
+    
+    template <class Connection_type>
+    void PortConnector<Connection_type>::handle_handshake(copyable_unique_ptr<Connection_type> connection, const boost::system::error_code& error_code) {
+        if (!error_code) {
+            Connection_type* pConnection = connection.release();
+            connection_manager.accepted(pConnection);
+            pConnection->start();
+            connected_callback();
+        } else {
+            if (error_code != boost::asio::error::operation_aborted) {
+                connection_manager.error(error_code);
+                connected_callback();
+            }
+        }
+    }
+#else
+    template <class Connection_type>
+        PortConnector<Connection_type>::PortConnector(
+                boost::asio::io_service& io_service_, 
+                Connection_manager& connection_manager_, 
+                const std::string& server_, 
+                int port_,
+                std::function<void()> connected_callback_)
+        :io_service(io_service_)
+        ,connection_manager(connection_manager_)
+        ,port(port_)
+        ,connected_callback(connected_callback_)
+        ,server(server_)
+        ,resolver(0)
+    {}
+#endif  
+
+template <class Connection_type>
+void PortConnector<Connection_type>::start() {            
+    tcp::resolver::query query(server, boost::lexical_cast< std::string>(port));
+
+    resolver = new tcp::resolver(io_service);
+
+    resolver->async_resolve(query,
+        boost::bind(&PortConnector::handle_resolve, this,
+            boost::asio::placeholders::error, 
+            boost::asio::placeholders::iterator));  
+}
+
+
+template <class Connection_type>
+boost::asio::io_service& PortConnector<Connection_type>::get_io_service() {
+    return io_service;
+}
+
+template <class Connection_type>
+void PortConnector<Connection_type>::handle_resolve(const boost::system::error_code& error_code, tcp::resolver::iterator endpoint_iterator) {
+    tcp::resolver::iterator end;
+    if (!error_code && endpoint_iterator != end) {
+        start_connect(endpoint_iterator);
+        delete resolver;
+        resolver = 0;
+    } else {
+        if (error_code != boost::asio::error::operation_aborted) {
+            connection_manager.error(error_code);
+            connected_callback();
+        }
+    }
+}
+
+template <class Connection_type>
+void PortConnector<Connection_type>::start_connect(tcp::resolver::iterator endpoint_iterator) {
+    #ifdef USE_SSL
+        Connection_type* pConnection = new Connection_type(io_service, *ssl_context, connection_manager);
+    #else
+        Connection_type* pConnection = new Connection_type(io_service, connection_manager);
+    #endif
+
+    copyable_unique_ptr<Connection_type> new_connection(pConnection);
+    tcp::resolver::endpoint_type endPoint = *endpoint_iterator;
+    pConnection->socket().lowest_layer().async_connect(endPoint,
+        boost::bind(&PortConnector::handle_connect, this, new_connection,
+            boost::asio::placeholders::error, ++endpoint_iterator));
+}
+  
+template <class Connection_type>
+void PortConnector<Connection_type>::handle_connect(
+            copyable_unique_ptr<Connection_type> connection, 
+            const boost::system::error_code& error_code, 
+            tcp::resolver::iterator next_endpoint_iterator) 
+    {
+
+    if (!error_code) {
+        #ifdef USE_SSL
+            Connection_type* pConnection = connection.get();
+            //Certainly violating unique ptr here. We use it to get the socket and call async_handshake on it and we pass it as a parameter
+            //It is ok here as the handshake event cannot trigger before the call to async_handshake has completed, I hope.
+            pConnection->socket().async_handshake(boost::asio::ssl::stream_base::client,
+                boost::bind(&PortConnector::handle_handshake, this, std::move(connection),
+                    boost::asio::placeholders::error));
+        #else
+            Connection_type* pConnection = connection.release();
+            connection_manager.accepted(pConnection);
+            pConnection->start();
+            connected_callback();
+        #endif   
+    } else {
+        if (error_code != boost::asio::error::operation_aborted) {
+            tcp::resolver::iterator end;
+            if (next_endpoint_iterator != end) {
+                start_connect(next_endpoint_iterator); //we try again with the next endpoint
+            } else {
+                connection_manager.error(error_code);
+                connected_callback();
+            }
+        }
+    }
+}
+
+
+#undef PortConnector
