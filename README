@@ -17,39 +17,39 @@ Server
 //accepts a connection and sends a welcome message
 class Acceptor : public Tcp_acceptor<> {
   public:
-	Acceptor(boost::asio::io_service& io_service) : Tcp_acceptor<>(io_service) {}
-	~Acceptor() {
-	    for (std::set<Tcp_connection*>::iterator it = m_connections.begin(); it != m_connections.end(); ++it) {
-	        delete *it;
-	    }
-	}
-	
-	//overload of the virtual function Tcp_acceptor::read, called any time a new connection is received
-	//you take ownership of the connections, so we store them in a set
-	void accepted(Tcp_connection* connection) {
-		m_connections.insert(connection);
-		std::cout << "Accepted a connection" << std::endl;
-		std::string welcome_message = "Welcome to the server";
-		connection->write(welcome_message.data(), welcome_message.length());
-	}
-	
-	//one of the generated connections is in error
-	void error(Tcp_connection* connection, const system::error_code& error_code) {
-	    std::cout << "A connection failed: " << error_code.message() << std::endl;
-	    delete connection;
-		m_connections.erase(connection);
-	}
-	
-	//the acceptor throws an error, this does not mean it will stop accepting connections, just that accepting one particular connection failed
-	void error(const system::error_code& error_code) {
-		std::cout << "Accept failed: " << error_code.message() << std::endl;
-	}
-	
-	//prints out everython it receives from connections.
-	void received(Tcp_connection* connection, const char* data, int size) {
-		std::cout << std::string(data, size) << " size: " << size << std::endl;
-	}
-	std::set<Tcp_connection*> m_connections;
+    Acceptor(boost::asio::io_service& io_service) : Tcp_acceptor<>(io_service) {}
+    ~Acceptor() {
+        for (std::set<Tcp_connection*>::iterator it = m_connections.begin(); it != m_connections.end(); ++it) {
+            delete *it;
+        }
+    }
+    
+    //overload of the virtual function Tcp_acceptor::read, called any time a new connection is received
+    //you take ownership of the connections, so we store them in a set
+    void accepted(Tcp_connection* connection) {
+        m_connections.insert(connection);
+        std::cout << "Accepted a connection" << std::endl;
+        std::string welcome_message = "Welcome to the server";
+        connection->write(welcome_message.data(), welcome_message.length());
+    }
+    
+    //one of the generated connections is in error
+    void error(Tcp_connection* connection, const system::error_code& error_code) {
+        std::cout << "A connection failed: " << error_code.message() << std::endl;
+        delete connection;
+        m_connections.erase(connection);
+    }
+    
+    //the acceptor throws an error, this does not mean it will stop accepting connections, just that accepting one particular connection failed
+    void error(const system::error_code& error_code) {
+        std::cout << "Accept failed: " << error_code.message() << std::endl;
+    }
+    
+    //prints out everython it receives from connections.
+    void received(Tcp_connection* connection, const char* data, int size) {
+        std::cout << std::string(data, size) << " size: " << size << std::endl;
+    }
+    std::set<Tcp_connection*> m_connections;
 };
 
 int main() {
@@ -70,9 +70,9 @@ You have to overload the following 4 functions
 
   obligated:
 
-	1) virtual void accepted(Tcp_connection* connection) = 0;
-	2) virtual void error(Tcp_connection* connection, const boost::system::error_code& error) = 0;
-	3) virtual void received(Tcp_connection* connection, const char* data, int size) = 0;
+    1) virtual void accepted(Tcp_connection* connection) = 0;
+    2) virtual void error(Tcp_connection* connection, const boost::system::error_code& error) = 0;
+    3) virtual void received(Tcp_connection* connection, const char* data, int size) = 0;
 
   optional:
 
@@ -80,7 +80,7 @@ You have to overload the following 4 functions
 
 And you can call the functions
 
-	5) void write(Tcp_connection* connection, const char* data, int size);
+    5) void write(Tcp_connection* connection, const char* data, int size);
     6) void accept(int port);
     7) coid stop_accept(int port);
     
@@ -123,38 +123,38 @@ So a client that will connect to the above server looks like this.
 //can connect to server(s) and sends a welcome message
 class Connector : public Tcp_connector<> {
   public:
-	Connector(boost::asio::io_service& io_service) : Tcp_connector<>(io_service) {}
-	
-	~Connector() {
-	    for (std::set<Tcp_connection*>::iterator it = m_connections.begin(); it != m_connections.end(); ++it) {
-	        delete *it;
-	    } 
-	}
-	
-	//You take ownership of the connections received here
-	void accepted(Tcp_connection* connection) {
-		m_connections.insert(connection);
-		std::string hello_message = "Hi, I'm a client";
-		m_connections.write(hello_message.data(), hello_message.length());
-	}
-	
-	//one of the connctions generated throws an error.
-	void error(Tcp_connection* connection, const system::error_code& error_code) {
-	    delete connection;
-		m_connections.erase(connection);
-	}
-	
-	//the connector has an error, print
-	void error(const system::error_code& error_code) {
-		std::cout << "Connection failed" << std::endl;
-	}
-	
-	//receives and print out data
-	void received(Tcp_connection* connection, const char* data, int size) {
-		std::cout << std::string(data, size) << std::endl;
-	}
-	
-	std::set<Tcp_connection*> m_connections;
+    Connector(boost::asio::io_service& io_service) : Tcp_connector<>(io_service) {}
+    
+    ~Connector() {
+        for (std::set<Tcp_connection*>::iterator it = m_connections.begin(); it != m_connections.end(); ++it) {
+            delete *it;
+        } 
+    }
+    
+    //You take ownership of the connections received here
+    void accepted(Tcp_connection* connection) {
+        m_connections.insert(connection);
+        std::string hello_message = "Hi, I'm a client";
+        m_connections.write(hello_message.data(), hello_message.length());
+    }
+    
+    //one of the connctions generated throws an error.
+    void error(Tcp_connection* connection, const system::error_code& error_code) {
+        delete connection;
+        m_connections.erase(connection);
+    }
+    
+    //the connector has an error, print
+    void error(const system::error_code& error_code) {
+        std::cout << "Connection failed" << std::endl;
+    }
+    
+    //receives and print out data
+    void received(Tcp_connection* connection, const char* data, int size) {
+        std::cout << std::string(data, size) << std::endl;
+    }
+    
+    std::set<Tcp_connection*> m_connections;
 };
 
 int main() {
@@ -189,7 +189,7 @@ Ssl_acceptor:
 
 Ssl_connector:
 
-	12) void ssl_connect(std::string server, int port, std::string certificate_file, std::string password = "");
+    12) void ssl_connect(std::string server, int port, std::string certificate_file, std::string password = "");
     13) ssl_set_certificate(std::string certificate_file, std::string password = "");    
     14) ssl_connect(std::string server, int port);
     15) ssl_stop_connect(std::string server, int port);
@@ -231,12 +231,7 @@ Q: Does it support ipv6 ?
 A: Yes, and automatically on all platforms boost asio supports it.
 
 Q: Does it support ipv4 ?
-A: Short answer: Yes
-   Long answer: On the connector it is no issue, it will connect to whatever the query returns. To understand the acceptors, you need to understand
-   a little about how ipv4/ipv6 interopability works. Modern Os's (Vista and onwars, latest version of ubuntu/mac os X) use a hybrid dual stack 
-   whoch basically allow ipv4 connection to connect to an ipv6 endpoint. So at the application level you can just open a ipv6 listener and be done with it.
-   On older os's that support ipv6 it is implemented using 2 network stacks. On these hosts, this library will open 2 listeners for every accept call to the library.
-   One on ipv4 and one on ipv6. So again yes.
+A: For the connector (client) it is no issue, it will connect to whatever a dns query returns. On the acceptor, the server side it will work on all modern platforms with Hybrid dual-stack such as windows vista and onwards, linux (2.6 kernel) distributions and Mac OS X 10.3 and onwards.
 
 Q: I'm getting a compiler error in Tcp_acceptor.h ?
 A: There is a bug in boost 1.42 and older that makes the upgrade_to_unique_lock not compile on gcc 4.5 and onwards. (like on ubuntu natty). upgrade to boost 1.47 or downgrade the compiler I guess.
@@ -245,20 +240,17 @@ Q: What libraries do i need to link to, which headers should be in my include pa
 A: In short, boost (system/regex/asio/threads), when compiled with -DUSE_SSL also openssl. 
 
 Q: Why did you not ship it as a shared library ?
-A: The behaviour of the library depends heavily on compiler options and templates.
-
-heavy due to some template usage so there wouldn't be much
-   compiled code in the header.
+A: The behaviour of the library depends heavily on compiler options and templates. Since there would be very little precompiled code, I've opted to make it header only.
    
 Q: The boost asio examples usually use shared pointers, why don't you ?
 A: The reason I don't return the pointers in smart pointer is because it is viral. Once a pointer is wrapped in a smart pointer, it is no longer possible to revert to a regular pointer ever. Putting a pointer into a smart pointer is very easy. I wanted to give users the option not to use this. 
 That being set, smart pointers are a natural fit for event based programming. Event based programming puts more emphasis on paths of execution and less on objects and strict ownership. In fact if you use at the implementation you will see smart pointers being used. Getting memory management right with boost asio without them is not easy.
    
-Q: Why all the precompiler flags ? precompiler flags are evil.
+Q: Why all the preprocessor flags ? preprocessor flags are evil.
 A: By using precompiler flags, you don't compile what you don't need. And one the focus of this project was making it more efficient than rolling your own network code.
 
 Q: Is it thread safe ?
-A: Using different acceptors/connectors on different io_service is always threadsafe. You can compile the library with the compile flag THREADSAFE to  make the public interface and multiple event handlers on the same io_service threadsafe. It has however not yet been properly tested, so threat it as experimental and inform me of the results.
+A: Using different acceptors/connectors on different io_service is always threadsafe. You can compile the library with the compile flag THREADSAFE to make the public interface and multiple event handlers on the same io_service threadsafe. It has however not yet been properly tested, so threat it as experimental and inform me of the results.
    
 -----
 
