@@ -1,4 +1,4 @@
-This code is a thin wrapper around boost Asio, making efficient asynchronous tcp network connections easy.
+This code is a thin wrapper around boost Asio, making efficient asynchronous tcp/ssl networking easy.
 
 The library handles the low-level asynchronous network code for you that is kind of tricky to get right and even trickier to get
 optimal performance. It offers an intuitive interface that should cover a lot of use cases especially if you have control
@@ -182,14 +182,14 @@ instead of 6 and 7, we have:
 
 Ssl_acceptor:
     
-     8) void ssl_accept(int port, std::string certificate_file, std::string password = "");
-     9) ssl_set_certificate(std::string certificate_file, std::string password = "");    
+     8) ssl_accept(int port, std::string private_key_file, std::string certificate_file, std::string password = "");
+     9) ssl_set_certificate(std::string private_key_file, std::string certificate_file, std::string password = "");    
     10) ssl_accept(int port);
     11) ssl_stop_accept(int port);
 
 Ssl_connector:
 
-    12) void ssl_connect(std::string server, int port, std::string certificate_file, std::string password = "");
+    12) ssl_connect(std::string server, int port, std::string certificate_file, std::string password = "");
     13) ssl_set_certificate(std::string certificate_file, std::string password = "");    
     14) ssl_connect(std::string server, int port);
     15) ssl_stop_connect(std::string server, int port);

@@ -46,23 +46,9 @@ int main() {
   {
     boost::asio::io_service io_service;
     Acceptor acceptor(io_service);
-    acceptor.ssl_accept(6000, "keys/server.pem");
+    acceptor.ssl_accept(6000, "keys/private_key.pem", "keys/certificate.pem");
     io_service.run();
   }
-  
-  {
-    boost::asio::io_service io_service;
-    Acceptor acceptor(io_service);
-    acceptor.ssl_accept(6000, "keys/server.pem");
-    io_service.run();
-  }
-  
-  {
-    boost::asio::io_service io_service;
-    Acceptor acceptor(io_service);
-    acceptor.ssl_accept(6000, "keys/server.pem");
-    io_service.run();
-  }
-  std::cout << "Everything should be released" << std::endl;
+
   return 0;
 }

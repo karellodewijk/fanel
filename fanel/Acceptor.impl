@@ -29,10 +29,10 @@ class Acceptor : public virtual Connection_manager {
   
     #ifdef USE_SSL
         ///start accepting ssl connections on the given port, certificate/private key will be loaded from the given file
-        void ssl_accept(int port, std::string certificate_file, std::string password = "");
+        void ssl_accept(int port, std::string private_key_file, std::string certificate_file, std::string password = "");
         
         ///load the certificate/private key from file that all calls to ssl_accept(int port) will use
-        void ssl_set_certificate(std::string certificate_file, std::string password = "");           
+        void ssl_set_certificate(std::string private_key_file, std::string certificate_file, std::string password = "");           
         
         ///accept ssl connections in given port
         ///@pre Certificate/private key should be initialized using ssl_set_certificate
@@ -132,12 +132,12 @@ void Acceptor<Connection_type>::stop_acceptor(int& port) {
 
 #ifdef USE_SSL
     template <class Connection_type>
-    void Acceptor<Connection_type>::ssl_accept(int port, std::string certificate_file, std::string password) {
+    void Acceptor<Connection_type>::ssl_accept(int port, std::string private_key_file, std::string certificate_file, std::string password) {
         std::unique_ptr<Ssl_context_with_password> ssl_context(new Ssl_context_with_password(boost::asio::ssl::context::sslv23, password));
         ssl_context->set_options(boost::asio::ssl::context::default_workarounds
                                 | boost::asio::ssl::context::no_sslv2);
         ssl_context->use_certificate_chain_file(certificate_file);
-        ssl_context->use_private_key_file(certificate_file, boost::asio::ssl::context::pem);
+        ssl_context->use_private_key_file(private_key_file, boost::asio::ssl::context::pem);
 
         Port_acceptor_type* new_port_acceptor = new Port_acceptor_type(io_service, *this, port, std::move(ssl_context));
         add_acceptor(port, new_port_acceptor);
@@ -154,7 +154,7 @@ void Acceptor<Connection_type>::stop_acceptor(int& port) {
     }
     
     template <class Connection_type>
-    void Acceptor<Connection_type>::ssl_set_certificate(std::string certificate_file, std::string password) {
+    void Acceptor<Connection_type>::ssl_set_certificate(std::string private_key_file, std::string certificate_file, std::string password) {
         #ifdef THREADSAFE
             boost::unique_lock<boost::shared_mutex> lock(shared_context_mutex);
         #endif
@@ -162,7 +162,7 @@ void Acceptor<Connection_type>::stop_acceptor(int& port) {
         pSsl_context->set_options(boost::asio::ssl::context::default_workarounds
                                  | boost::asio::ssl::context::no_sslv2);
         pSsl_context->use_certificate_chain_file(certificate_file);
-        pSsl_context->use_private_key_file(certificate_file, boost::asio::ssl::context::pem);
+        pSsl_context->use_private_key_file(private_key_file, boost::asio::ssl::context::pem);
     }     
     
     template <class Connection_type>

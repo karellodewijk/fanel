@@ -58,7 +58,7 @@ int main() {
   try {
     boost::asio::io_service io_service;
     Connector connector(io_service);
-    connector.ssl_connect("localhost", 6000, "client.pem");
+    connector.ssl_connect("localhost", 6000, "keys/certificate.pem");
     io_service.run();
   } catch (std::exception& e) {
     std::cerr << e.what() << std::endl;
