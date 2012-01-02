@@ -29,8 +29,6 @@ class Connection {
     virtual
     #endif
     void error(const system::error_code& error_code);
-
-  private:
     Connection_manager& connection_manager;
 };
 

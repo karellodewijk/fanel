@@ -16,6 +16,8 @@ class Connection_manager {
     virtual void error(const boost::system::error_code& error) {}
     ///overload to receive data from an existing connection
     virtual void received(Connection* connection, const char* data, int size) = 0;
+    ///overload to receive a notice when a connection is done writing
+    virtual void write_done(Connection* connection) {};
 };
 
 #endif //FANEL_CONNECTION_MANAGER_H

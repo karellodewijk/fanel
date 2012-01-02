@@ -1,10 +1,16 @@
 #include <fanel/Tcp_connection.h>
 #include <fanel/Tcp_acceptor.h>
+#include <boost/filesystem.hpp>
+#include <boost/filesystem/fstream.hpp>
 #include <set>
 #include <iostream>
 #include <sstream>
 
-struct Request {
+using namespace boost::filesystem;
+
+filesystem::path root;
+
+struct Get_request {
     std::map<std::string, std::string> headers;
     std::string command;
     std::string uri;
@@ -41,9 +47,27 @@ struct Request {
             remaining--;
         }
     }
+
+    void fetch(char*& page, size_t& size) {
+        path p = root / uri;
+        if (!exists(p)) return;
+        if (is_directory(p)) {
+            if (is_regular_file(p / "index.html")) {
+                p /= "index.html";
+            } else if (is_regular_file(p / "index.htm")) {
+                p /= "index.htm";
+            } else {
+                return;
+            }
+        }
+        size = file_size(p);
+        page = (char *)malloc(size);
+        filesystem::ifstream file(p);
+        file.read(page, size);
+    }
 };
 
-std::ostream& operator<<(std::ostream& out, const Request& request) {
+std::ostream& operator<<(std::ostream& out, const Get_request& request) {
     out << "Command: " << request.command << std::endl;
     out << "Uri: " << request.uri << std::endl;
     out << "Protocol: " << request.protocol << std::endl;
@@ -65,9 +89,7 @@ class Acceptor : public Tcp_acceptor<> {
 	}
 	
 	void accepted(Connection* connection) {
-	    std::string server_hello("server says hello");
 		m_connections.insert(connection);
-		connection->write(server_hello.data(), server_hello.size());
 	}
 	
 	void error(Connection* connection, const system::error_code& error_code) {
@@ -80,11 +102,19 @@ class Acceptor : public Tcp_acceptor<> {
 	}
 	
 	void received(Connection* connection, const char* data, int size) {
-		std::cout << std::string(data, size) << std::endl;
-	    Request request;
+	    Get_request request;
 	    request.parse(data, size);
 	    std::cout << request << std::endl;
+        char* page;
+        size_t page_size = 0;
+        request.fetch(page, page_size);
+        connection->write(page, page_size);
 	}
+
+    void done_writing(Connection* connection) {
+	    delete connection;
+		m_connections.erase(connection);
+    }
 	
     std::set<Connection*> m_connections;
 };
@@ -106,7 +136,13 @@ int main(int argc, const char* argv[]) {
 
     std::cout << "Serving on port: " << port << std::endl;
     std::cout << "Document root: " << document_root << std::endl;     
-    
+
+    root = path(document_root); 
+    if (!exists(root) || !is_directory(root))  {
+        std::cout << "Path: " << document_root << ", does not exist or is not a directory." <<  std::endl;
+        exit(1);
+    }
+
     boost::asio::io_service io_service;
     Acceptor acceptor(io_service);
     acceptor.accept(port);

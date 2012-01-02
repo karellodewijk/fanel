@@ -77,21 +77,23 @@ You have to overload the following 4 functions
   optional:
 
     4) virtual void error(const boost::system::error_code& error) {}
+    5) virtual void write_done(Connection* connection) {};
 
 And you can call the functions
 
-    5) void write(Tcp_connection* connection, const char* data, int size);
-    6) void accept(int port);
-    7) coid stop_accept(int port);
+    6) void write(Tcp_connection* connection, const char* data, int size);
+    7) void accept(int port);
+    8) coid stop_accept(int port);
     
 1: This function is called when a connection is accepted. You must take ownership of the connection. If you do not store it somewhere and delete it when you no longer need it, you will create a leak.
 2: This function is called when an error happened on a particular connection, such as a disconnect, but many others. This just receives all error codes messages boost asio generates and Maximum message size exceeded.
    We assume in the client here, the error is not recoverable and delete the connection
 3: This function is called whenever a connection receives a message. If you use the accompanying client code. Messages written to a connection at one side will come out at the other side unaffected
 4: Also the acceptor itself can receives an error. These errors are generally non-fatal, such as unable to bind or a particular accept failed, so we ignore them here.
-5: Write to a particular connection, note that you can also use the connection pointer and call write on that write(connection, "hello", 5) is equivalent to connection->write("hello", 5);
-6: Start accepting connection on the given port.
-7: Stop accepting connection from a port from now on. Allready accepted connections will not be dropped.
+5: A connection has emptied his write queue.
+6: Write to a particular connection, note that you can also use the connection pointer and call write on that write(connection, "hello", 5) is equivalent to connection->write("hello", 5);
+7: Start accepting connection on the given port.
+8: Stop accepting connection from a port from now on. Allready accepted connections will not be dropped.
 
 This is all there is to creating a high performance asynchronous network application.
 
@@ -103,15 +105,15 @@ This code really shines when you are creating both a client and a server or a co
     - You inherit from Tcp_connector<>
     - You call void connect(std::string servernamen, int port) rather than accept.
 
-1,2,3,4,5 are identical. Connectors also generate connections.   
+1,2,3,4,5,6 are identical. Connectors also generate connections.   
 
-6 and 7 become:
+7 and 8 become:
 
-    6) void connect(std::string server, int port);
-    7) void stop_connect(std::string server, int port);
+    7) void connect(std::string server, int port);
+    8) void stop_connect(std::string server, int port);
 
-6: Connect to a server
-7: Stop connecting to a server. !!!This does not terminate an allready active connection, it just stops a connection in progress but not yet established.
+7: Connect to a server
+8: Stop connecting to a server. !!!This does not terminate an allready active connection, it just stops a connection in progress but not yet established.
 
 So a client that will connect to the above server looks like this.
 
@@ -176,9 +178,9 @@ When the code is compiled with -DUSE_SSL, Ssl_connector/Ssl_acceptor/Ssl_connect
 
 The interface is much the same than it's non-ssl counterparts:
 
-1,2,3,4,5 are again identical. 
+1,2,3,4,5,6 are again identical. 
 
-instead of 6 and 7, we have:
+instead of 7 and 8, we have:
 
 Ssl_acceptor:
     

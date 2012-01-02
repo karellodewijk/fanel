@@ -139,8 +139,8 @@ custom_network_error_category Socket_connection<SocketType>::cat;
   
   template<class SocketType>
   Socket_connection<SocketType>::~Socket_connection() {
-    //if (socket_.is_open())
-    //    socket_.shutdown(asio::ip::tcp::socket::shutdown_both);
+    if (socket_.lowest_layer().is_open())
+        socket_.lowest_layer().shutdown(asio::ip::tcp::socket::shutdown_both);
     #ifdef THREADSAFE
         boost::lock_guard<boost::mutex> lock(write_queue_mutex);
     #endif
@@ -179,7 +179,9 @@ custom_network_error_category Socket_connection<SocketType>::cat;
             asio::async_write(socket_, asio::buffer(new_buffer.data, new_buffer.size),
                 bind(&Socket_connection::handle_write, this,
                     asio::placeholders::error));
-                    
+        else
+            connection_manager.write_done(this);
+         
         free(old_buffer.data); //basically it doesn't matter when we free the buffer, so we let everything performance critical take priority
                                //not that I think freeing is that expensive but getting memory management out of the critical sections is 
                                //always a good idea.

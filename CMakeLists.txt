@@ -6,7 +6,7 @@ set (fanel_VERSION 1.0)
 
 find_package(OpenSSL)
 find_package(Threads)
-find_package(Boost 1.47.0 REQUIRED COMPONENTS system regex thread)
+find_package(Boost 1.47.0 REQUIRED COMPONENTS system regex thread filesystem)
 
 FILE(GLOB headers "${CMAKE_CURRENT_SOURCE_DIR}/fanel/*.h")
 FILE(GLOB implementation "${CMAKE_CURRENT_SOURCE_DIR}/fanel/*.impl")
