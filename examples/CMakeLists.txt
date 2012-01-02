@@ -17,7 +17,7 @@ target_link_libraries(delimiter_client_and_server ${LIBRARIES})
 
 set_target_properties(delimiter_server delimiter_client delimiter_client_and_server 
                       PROPERTIES 
-                              COMPILE_FLAGS ""-DDELIMITER="::" ""
+                              COMPILE_FLAGS "-DDELIMITER=\\\"::\\\" "
                      )
 
 add_executable(netstring_client client.cpp)
@@ -54,5 +54,14 @@ set_target_properties(ssl_server ssl_client
                               COMPILE_FLAGS "-DUSE_SSL"
                      )
 
+add_executable(http_server simple_http_server.cpp)
+target_link_libraries(http_server ${LIBRARIES})
+
+set_target_properties(http_server
+                      PROPERTIES
+                              #I know it's silly, but cmake unescapes, so does g++
+                              #and the preprocessor does it a third time.                              
+                              COMPILE_FLAGS "-g -DDELIMITER=\\\"\\\\r\\\\n\\\\r\\\\n\\\" "
+                     )
 
 

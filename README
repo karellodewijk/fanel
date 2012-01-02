@@ -271,7 +271,10 @@ Compile flags:
   Network framing:
   
     DELIMITER=\":\"  
-        Instead of the default length prefix framing, the network code will use the given delimiter
+        Instead of the default length prefix framing, the network code will use the given delimiter. Note that 
+        intermediate delimiters are not automatically escaped. When receiving the message, the delimiter is not
+        included in the size, but you may assume it is present in the buffer if you read past the end of the 
+        message.
     NETSTRING
         Instead of the default length prefix, the network code will use NETSTRING encoding, see http://en.wikipedia.org/wiki/Netstring
     STREALING
