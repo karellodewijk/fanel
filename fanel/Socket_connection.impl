@@ -125,7 +125,7 @@ custom_network_error_category Socket_connection<SocketType>::cat;
         asio::async_write(socket_, asio::buffer(buffer.data, buffer.size),
             bind(&Socket_connection::handle_write, this,
                 asio::placeholders::error,
-                still_alive));    
+                std::weak_ptr<bool>(still_alive)));    
   }
   
   template<class SocketType>
@@ -183,7 +183,7 @@ custom_network_error_category Socket_connection<SocketType>::cat;
             asio::async_write(socket_, asio::buffer(new_buffer.data, new_buffer.size),
                 bind(&Socket_connection::handle_write, this,
                     asio::placeholders::error,
-                    still_alive));
+                    std::weak_ptr<bool>(still_alive)));
         else
             connection_manager.write_done(this);
          
@@ -211,7 +211,7 @@ custom_network_error_category Socket_connection<SocketType>::cat;
             bind(&Socket_connection::handle_read, this,
                 asio::placeholders::error,
                 asio::placeholders::bytes_transferred,
-                still_alive));
+                std::weak_ptr<bool>(still_alive)));
       } 
       
       template<class SocketType>
@@ -288,7 +288,7 @@ custom_network_error_category Socket_connection<SocketType>::cat;
                   bind(&Socket_connection::handle_read, this,
                       asio::placeholders::error,
                       asio::placeholders::bytes_transferred,
-                      still_alive));
+                      std::weak_ptr<bool>(still_alive)));
               
           } else {
               error(error_code);
@@ -306,7 +306,7 @@ custom_network_error_category Socket_connection<SocketType>::cat;
             bind(&Socket_connection::handle_read_header, this,
                 asio::placeholders::error,
                 asio::placeholders::bytes_transferred,
-                still_alive));
+                std::weak_ptr<bool>(still_alive)));
       }
       
       template<class SocketType>
@@ -345,7 +345,7 @@ custom_network_error_category Socket_connection<SocketType>::cat;
                           bind(&Socket_connection::handle_read_header, this,
                               asio::placeholders::error,
                               asio::placeholders::bytes_transferred,
-                              still_alive));                 
+                              std::weak_ptr<bool>(still_alive)));                 
                   } else {
                       free(m_readbuf);
                       m_readbuf = 0;     
@@ -381,7 +381,7 @@ custom_network_error_category Socket_connection<SocketType>::cat;
                       asio::async_read(socket_, asio::mutable_buffers_1(m_readbuf + superfluous_data + 1, still_to_read),
                           bind(&Socket_connection::handle_read_body, this, length + 1,
                               asio::placeholders::error,
-                              still_alive));
+                              std::weak_ptr<bool>(still_alive)));
                               
                   } catch (boost::bad_lexical_cast) {
                       free(m_readbuf);
@@ -424,7 +424,7 @@ custom_network_error_category Socket_connection<SocketType>::cat;
             bind(&Socket_connection::handle_read, this,
                 asio::placeholders::error,
                 asio::placeholders::bytes_transferred,
-                still_alive));
+                std::weak_ptr<bool>(still_alive)));
       }
       
       template<class SocketType>
@@ -448,7 +448,7 @@ custom_network_error_category Socket_connection<SocketType>::cat;
         asio::async_read(socket_, asio::mutable_buffers_1(m_readbuf, 4),
             bind(&Socket_connection::handle_read_header, this,
                 asio::placeholders::error,
-                still_alive));
+                std::weak_ptr<bool>(still_alive)));
       }
       
       template<class SocketType>
@@ -468,7 +468,7 @@ custom_network_error_category Socket_connection<SocketType>::cat;
               asio::async_read(socket_, asio::mutable_buffers_1(m_readbuf, msg_len),
                   bind(&Socket_connection::handle_read_body, this, msg_len,
                       asio::placeholders::error,
-                      still_alive));
+                      std::weak_ptr<bool>(still_alive)));
           } else {
               free(m_readbuf);
               m_readbuf = 0;

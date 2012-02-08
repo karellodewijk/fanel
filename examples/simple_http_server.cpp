@@ -48,22 +48,22 @@ struct Get_request {
         }
     }
 
-    void fetch(char*& page, size_t& size) {
+    std::string fetch() {
         path p = root / uri;
-        if (!exists(p)) return;
+        if (!exists(p)) return "HTTP/1.0 404 PAGE NOT FOUND\r\n\r\n";
         if (is_directory(p)) {
             if (is_regular_file(p / "index.html")) {
                 p /= "index.html";
             } else if (is_regular_file(p / "index.htm")) {
                 p /= "index.htm";
             } else {
-                return;
+                return "HTTP/1.0 404 PAGE NOT FOUND\r\n\r\n";
             }
         }
-        size = file_size(p);
-        page = (char *)malloc(size);
+        std::string page = "HTTP/1.0 200 OK\r\n\r\n";
         filesystem::ifstream file(p);
-        file.read(page, size);
+        page.append((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+        return page;
     }
 };
 
@@ -105,13 +105,12 @@ class Acceptor : public Tcp_acceptor<> {
 	    Get_request request;
 	    request.parse(data, size);
 	    std::cout << request << std::endl;
-        char* page;
-        size_t page_size = 0;
-        request.fetch(page, page_size);
-        connection->write(page, page_size);
+        std::string page = request.fetch();
+        connection->write(page.data(), page.size());
 	}
 
-    void done_writing(Connection* connection) {
+    void write_done(Connection* connection) {
+        std::cout << "Done writing, disconnecting" << std::endl;
 	    delete connection;
 		m_connections.erase(connection);
     }

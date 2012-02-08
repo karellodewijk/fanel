@@ -151,7 +151,7 @@ void PortConnector<Connection_type>::start() {
         boost::bind(&PortConnector::handle_resolve, this,
             boost::asio::placeholders::error, 
             boost::asio::placeholders::iterator,
-            still_alive));  
+            std::weak_ptr<bool>(still_alive)));  
 }
 
 
@@ -187,7 +187,7 @@ void PortConnector<Connection_type>::start_connect(tcp::resolver::iterator endpo
     pConnection->socket().lowest_layer().async_connect(endPoint,
         boost::bind(&PortConnector::handle_connect, this, new_connection,
             boost::asio::placeholders::error, ++endpoint_iterator,
-            still_alive));
+            std::weak_ptr<bool>(still_alive)));
 }
   
 template <class Connection_type>
@@ -206,7 +206,7 @@ void PortConnector<Connection_type>::handle_connect(
             pConnection->socket().async_handshake(boost::asio::ssl::stream_base::client,
                 boost::bind(&PortConnector::handle_handshake, this, std::move(connection),
                     boost::asio::placeholders::error,
-                    still_alive));
+                    std::weak_ptr<bool>(still_alive)));
         #else
             Connection_type* pConnection = connection.release();
             connection_manager.accepted(pConnection);

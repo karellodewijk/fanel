@@ -93,7 +93,7 @@ void PortAcceptor<Connection_type>::start() {
         boost::bind(&PortAcceptor::handle_resolve, this,
             boost::asio::placeholders::error, 
             boost::asio::placeholders::iterator,
-            still_alive));
+            std::weak_ptr<bool>(still_alive)));
 }
 
 template <class Connection_type>
@@ -223,7 +223,7 @@ void PortAcceptor<Connection_type>::start_accept() {
     acceptor->async_accept(pConnection->socket().lowest_layer(),
         boost::bind(&PortAcceptor::handle_accept, this, std::move(connection),
             boost::asio::placeholders::error,
-            still_alive)); 
+            std::weak_ptr<bool>(still_alive))); 
 }
 
 template <class Connection_type>
@@ -239,7 +239,7 @@ void PortAcceptor<Connection_type>::handle_accept(copyable_unique_ptr<Connection
             pConnection->socket().async_handshake(boost::asio::ssl::stream_base::server,
                 boost::bind(&PortAcceptor::handle_handshake, this, std::move(connection),
                     boost::asio::placeholders::error,
-                    still_alive));
+                    std::weak_ptr<bool>(still_alive)));
         #else
             //if we don't use SSL the connection is now ready
             Connection_type* pConnection = connection.release();
