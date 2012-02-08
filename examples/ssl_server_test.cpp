@@ -20,7 +20,6 @@ class Acceptor : public Ssl_acceptor<> {
 		std::string welcome_message = "Welcome to the test server";
 		connection->write(welcome_message.data(), welcome_message.length());
 		connection->write(welcome_message.data(), welcome_message.length());
-		ssl_stop_accept(6000);
 	}
 	
 	//one of the generated connections is in error

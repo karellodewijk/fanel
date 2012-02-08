@@ -63,14 +63,14 @@ class PortAcceptor {
     
 private:
     #ifdef USE_SSL
-        void handle_handshake(copyable_unique_ptr<Connection_type> connection, const boost::system::error_code& error_code);
+        void handle_handshake(copyable_unique_ptr<Connection_type> connection, const boost::system::error_code& error_code, std::weak_ptr<bool> alive);
         std::shared_ptr<Ssl_context_with_password> ssl_context;
     #endif
 
     void start_accept();
     void start_acceptor(tcp::resolver::iterator endpoint_iterator);
-    void handle_accept(copyable_unique_ptr<Connection_type> connection, const boost::system::error_code& error);
-    void handle_resolve(const boost::system::error_code& error, tcp::resolver::iterator endpoint_iterator);
+    void handle_accept(copyable_unique_ptr<Connection_type> connection, const boost::system::error_code& error, std::weak_ptr<bool> alive);
+    void handle_resolve(const boost::system::error_code& error, tcp::resolver::iterator endpoint_iterator, std::weak_ptr<bool> alive);
   
     tcp::acceptor* acceptor;
     tcp::resolver* resolver;
@@ -78,6 +78,7 @@ private:
     int port;
     Connection_manager& connection_manager;
     boost::asio::io_service& io_service;
+    std::shared_ptr<bool> still_alive;
 };
 
 template <class Connection_type>
@@ -91,7 +92,8 @@ void PortAcceptor<Connection_type>::start() {
     resolver->async_resolve(query,
         boost::bind(&PortAcceptor::handle_resolve, this,
             boost::asio::placeholders::error, 
-            boost::asio::placeholders::iterator));
+            boost::asio::placeholders::iterator,
+            still_alive));
 }
 
 template <class Connection_type>
@@ -117,17 +119,18 @@ boost::asio::io_service& PortAcceptor<Connection_type>::get_io_service() {
         ,port(port_)
         ,acceptor(0)
         ,resolver(0)
+        ,still_alive(new bool(true))
     {}
     
     template <class Connection_type>
-    void PortAcceptor<Connection_type>::handle_handshake(copyable_unique_ptr<Connection_type> connection, const boost::system::error_code& error_code) {
+    void PortAcceptor<Connection_type>::handle_handshake(copyable_unique_ptr<Connection_type> connection, const boost::system::error_code& error_code, std::weak_ptr<bool> alive) {
+        if (alive.expired()) return;
         if (!error_code) {
             Connection_type* pConnection = connection.release();
             connection_manager.accepted(pConnection);
             pConnection->start();
         } else {
-            if (error_code != boost::asio::error::operation_aborted)
-                connection_manager.error(error_code);
+            connection_manager.error(error_code);
         }
     }
     
@@ -138,18 +141,19 @@ boost::asio::io_service& PortAcceptor<Connection_type>::get_io_service() {
         ,connection_manager(connection_manager_)
         ,port(port_)
         ,acceptor(0)
+        ,still_alive(new bool(true))
     {}
 #endif
 
 template <class Connection_type>
-void PortAcceptor<Connection_type>::handle_resolve(const boost::system::error_code& error_code, tcp::resolver::iterator endpoint_iterator) {
+void PortAcceptor<Connection_type>::handle_resolve(const boost::system::error_code& error_code, tcp::resolver::iterator endpoint_iterator, std::weak_ptr<bool> alive) {
+    if (alive.expired()) return;
     if (!error_code) {
         start_acceptor(endpoint_iterator);
         delete resolver;
         resolver = 0;
     } else {
-        if (error_code != boost::asio::error::operation_aborted)
-            connection_manager.error(error_code);
+        connection_manager.error(error_code);
     }
 }
 
@@ -218,11 +222,13 @@ void PortAcceptor<Connection_type>::start_accept() {
     copyable_unique_ptr<Connection_type> connection(pConnection);
     acceptor->async_accept(pConnection->socket().lowest_layer(),
         boost::bind(&PortAcceptor::handle_accept, this, std::move(connection),
-            boost::asio::placeholders::error)); 
+            boost::asio::placeholders::error,
+            still_alive)); 
 }
 
 template <class Connection_type>
-void PortAcceptor<Connection_type>::handle_accept(copyable_unique_ptr<Connection_type> connection, const boost::system::error_code& error_code) {
+void PortAcceptor<Connection_type>::handle_accept(copyable_unique_ptr<Connection_type> connection, const boost::system::error_code& error_code, std::weak_ptr<bool> alive) {
+    if (alive.expired()) return;
     if (!error_code) {
         //restart the acceptor, this takes precedence so we don't have to wait for this call to finish to accept a new connection
         start_accept();
@@ -232,7 +238,8 @@ void PortAcceptor<Connection_type>::handle_accept(copyable_unique_ptr<Connection
             //It is ok here as the handshake event cannot trigger before the call to async_handshake has completed, I hope.
             pConnection->socket().async_handshake(boost::asio::ssl::stream_base::server,
                 boost::bind(&PortAcceptor::handle_handshake, this, std::move(connection),
-                    boost::asio::placeholders::error));
+                    boost::asio::placeholders::error,
+                    still_alive));
         #else
             //if we don't use SSL the connection is now ready
             Connection_type* pConnection = connection.release();
@@ -240,8 +247,7 @@ void PortAcceptor<Connection_type>::handle_accept(copyable_unique_ptr<Connection
             connection_manager.accepted(pConnection);
         #endif
     } else {
-        if (error_code != boost::asio::error::operation_aborted)
-            connection_manager.error(error_code);
+        connection_manager.error(error_code);
     }
 }
 

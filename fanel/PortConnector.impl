@@ -37,9 +37,7 @@ using boost::asio::ip::tcp;
     template <class Connection_type = Tcp_connection>
 #endif
 class PortConnector {
-
   public:
-    PortConnector(boost::asio::io_service& io_service);
     ~PortConnector();
     
     void start();
@@ -62,14 +60,15 @@ class PortConnector {
     #endif
 
   private:
-    void handle_resolve(const boost::system::error_code& error_code, tcp::resolver::iterator endpoint_iterator);
+    void handle_resolve(const boost::system::error_code& error_code, tcp::resolver::iterator endpoint_iterator, std::weak_ptr<bool> alive);
     void start_connect(tcp::resolver::iterator endpoint_iterator);  
     void handle_connect(copyable_unique_ptr<Connection_type> connection, 
                         const boost::system::error_code& error_code, 
-                        tcp::resolver::iterator next_endpoint_iterator);
+                        tcp::resolver::iterator next_endpoint_iterator, 
+                        std::weak_ptr<bool> alive);
 
     #ifdef USE_SSL
-        void handle_handshake(copyable_unique_ptr<Connection_type> connection, const boost::system::error_code& error_code);
+        void handle_handshake(copyable_unique_ptr<Connection_type> connection, const boost::system::error_code& error_code, std::weak_ptr<bool> alive);
         std::shared_ptr<Ssl_context_with_password> ssl_context;
     #endif
 
@@ -79,6 +78,7 @@ class PortConnector {
     int port;
     std::string server;
     std::function<void()> connected_callback;
+    std::shared_ptr<bool> still_alive;
 };
 
 //implementation
@@ -107,20 +107,20 @@ PortConnector<Connection_type>::~PortConnector() {
         ,connected_callback(connected_callback_)
         ,server(server_)
         ,resolver(0)
+        ,still_alive(new bool(true))
     {}
     
     template <class Connection_type>
-    void PortConnector<Connection_type>::handle_handshake(copyable_unique_ptr<Connection_type> connection, const boost::system::error_code& error_code) {
+    void PortConnector<Connection_type>::handle_handshake(copyable_unique_ptr<Connection_type> connection, const boost::system::error_code& error_code, std::weak_ptr<bool> alive) {
+        if (alive.expired()) return;
         if (!error_code) {
             Connection_type* pConnection = connection.release();
             connection_manager.accepted(pConnection);
             pConnection->start();
             connected_callback();
         } else {
-            if (error_code != boost::asio::error::operation_aborted) {
-                connection_manager.error(error_code);
-                connected_callback();
-            }
+            connection_manager.error(error_code);
+            connected_callback();
         }
     }
 #else
@@ -137,6 +137,7 @@ PortConnector<Connection_type>::~PortConnector() {
         ,connected_callback(connected_callback_)
         ,server(server_)
         ,resolver(0)
+        ,still_alive(new bool(true))
     {}
 #endif  
 
@@ -149,7 +150,8 @@ void PortConnector<Connection_type>::start() {
     resolver->async_resolve(query,
         boost::bind(&PortConnector::handle_resolve, this,
             boost::asio::placeholders::error, 
-            boost::asio::placeholders::iterator));  
+            boost::asio::placeholders::iterator,
+            still_alive));  
 }
 
 
@@ -159,17 +161,16 @@ boost::asio::io_service& PortConnector<Connection_type>::get_io_service() {
 }
 
 template <class Connection_type>
-void PortConnector<Connection_type>::handle_resolve(const boost::system::error_code& error_code, tcp::resolver::iterator endpoint_iterator) {
+void PortConnector<Connection_type>::handle_resolve(const boost::system::error_code& error_code, tcp::resolver::iterator endpoint_iterator, std::weak_ptr<bool> alive) {
+    if (alive.expired()) return;
     tcp::resolver::iterator end;
     if (!error_code && endpoint_iterator != end) {
         start_connect(endpoint_iterator);
         delete resolver;
         resolver = 0;
     } else {
-        if (error_code != boost::asio::error::operation_aborted) {
-            connection_manager.error(error_code);
-            connected_callback();
-        }
+        connection_manager.error(error_code);
+        connected_callback();
     }
 }
 
@@ -185,16 +186,18 @@ void PortConnector<Connection_type>::start_connect(tcp::resolver::iterator endpo
     tcp::resolver::endpoint_type endPoint = *endpoint_iterator;
     pConnection->socket().lowest_layer().async_connect(endPoint,
         boost::bind(&PortConnector::handle_connect, this, new_connection,
-            boost::asio::placeholders::error, ++endpoint_iterator));
+            boost::asio::placeholders::error, ++endpoint_iterator,
+            still_alive));
 }
   
 template <class Connection_type>
 void PortConnector<Connection_type>::handle_connect(
             copyable_unique_ptr<Connection_type> connection, 
             const boost::system::error_code& error_code, 
-            tcp::resolver::iterator next_endpoint_iterator) 
+            tcp::resolver::iterator next_endpoint_iterator,
+            std::weak_ptr<bool> alive) 
     {
-
+    if (alive.expired()) return;
     if (!error_code) {
         #ifdef USE_SSL
             Connection_type* pConnection = connection.get();
@@ -202,7 +205,8 @@ void PortConnector<Connection_type>::handle_connect(
             //It is ok here as the handshake event cannot trigger before the call to async_handshake has completed, I hope.
             pConnection->socket().async_handshake(boost::asio::ssl::stream_base::client,
                 boost::bind(&PortConnector::handle_handshake, this, std::move(connection),
-                    boost::asio::placeholders::error));
+                    boost::asio::placeholders::error,
+                    still_alive));
         #else
             Connection_type* pConnection = connection.release();
             connection_manager.accepted(pConnection);
@@ -210,14 +214,12 @@ void PortConnector<Connection_type>::handle_connect(
             connected_callback();
         #endif   
     } else {
-        if (error_code != boost::asio::error::operation_aborted) {
-            tcp::resolver::iterator end;
-            if (next_endpoint_iterator != end) {
-                start_connect(next_endpoint_iterator); //we try again with the next endpoint
-            } else {
-                connection_manager.error(error_code);
-                connected_callback();
-            }
+        tcp::resolver::iterator end;
+        if (next_endpoint_iterator != end) {
+            start_connect(next_endpoint_iterator); //we try again with the next endpoint
+        } else {
+            connection_manager.error(error_code);
+            connected_callback();
         }
     }
 }

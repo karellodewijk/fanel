@@ -8,6 +8,7 @@
 
 #include <deque>
 #include <boost/asio.hpp>
+#include <memory>
 
 #ifdef THREADSAFE
     #include <boost/thread/shared_mutex.hpp>
@@ -84,33 +85,34 @@ class Socket_connection : public Connection {
   private:
 
     void start_write();
-    void handle_write(const system::error_code& error);
+    void handle_write(const system::error_code& error, std::weak_ptr<bool> alive);
     
     #ifdef DELIMITER
         void start_read();
-        void handle_read(const system::error_code& error, std::size_t bytes_transferred );
+        void handle_read(const system::error_code& error, std::size_t bytes_transferred, std::weak_ptr<bool> alive);
         size_t read_progress;
         size_t read_buffer_size;
         size_t delimiter_progress;
         char* message_start;
     #elif NETSTRING
         void start_read_header();
-        void handle_read_header(const system::error_code& error, std::size_t bytes_transferred);
+        void handle_read_header(const system::error_code& error, std::size_t bytes_transferred, std::weak_ptr<bool> alive);
         std::string length_string;
         size_t header_progress;
-        void handle_read_body(size_t size, const system::error_code& error);
+        void handle_read_body(size_t size, const system::error_code& error, std::weak_ptr<bool> alive);
     #elif STREAMING
         void start_read();
-        void handle_read(const system::error_code& error, std::size_t bytes_transferred );
+        void handle_read(const system::error_code& error, std::size_t bytes_transferred, std::weak_ptr<bool> alive);
     #else //default size_prefix
         void start_read_header();
-        void handle_read_header(const system::error_code& error);
-        void handle_read_body(size_t size, const system::error_code& error);
+        void handle_read_header(const system::error_code& error, std::weak_ptr<bool> alive);
+        void handle_read_body(size_t size, const system::error_code& error, std::weak_ptr<bool> alive);
     #endif
 
     SocketType socket_;    
     std::deque<Buffer> write_queue;
     char* m_readbuf;
+	std::shared_ptr<bool> still_alive;
 
     #ifdef THREADSAFE
     boost::mutex write_queue_mutex;
