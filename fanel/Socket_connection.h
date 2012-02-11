@@ -109,9 +109,9 @@ class Socket_connection : public Connection {
         void handle_read_body(size_t size, const system::error_code& error, std::weak_ptr<bool> alive);
     #endif
 
-    SocketType socket_;    
-    std::deque<Buffer> write_queue;
+    SocketType socket_;
     char* m_readbuf;
+    std::deque<Buffer> write_queue;
 	std::shared_ptr<bool> still_alive;
 
     #ifdef THREADSAFE

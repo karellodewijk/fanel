@@ -62,24 +62,59 @@ class PortAcceptor {
     #endif
     
 private:
-    #ifdef USE_SSL
-        void handle_handshake(copyable_unique_ptr<Connection_type> connection, const boost::system::error_code& error_code, std::weak_ptr<bool> alive);
-        std::shared_ptr<Ssl_context_with_password> ssl_context;
-    #endif
-
     void start_accept();
     void start_acceptor(tcp::resolver::iterator endpoint_iterator);
     void handle_accept(copyable_unique_ptr<Connection_type> connection, const boost::system::error_code& error, std::weak_ptr<bool> alive);
     void handle_resolve(const boost::system::error_code& error, tcp::resolver::iterator endpoint_iterator, std::weak_ptr<bool> alive);
   
+    boost::asio::io_service& io_service;
     tcp::acceptor* acceptor;
-    tcp::resolver* resolver;
-    
+    tcp::resolver* resolver;    
     int port;
     Connection_manager& connection_manager;
-    boost::asio::io_service& io_service;
     std::shared_ptr<bool> still_alive;
+
+    #ifdef USE_SSL
+        void handle_handshake(copyable_unique_ptr<Connection_type> connection, const boost::system::error_code& error_code, std::weak_ptr<bool> alive);
+        std::shared_ptr<Ssl_context_with_password> ssl_context;
+    #endif
 };
+
+#ifdef USE_SSL
+    template <class Connection_type>
+    PortAcceptor<Connection_type>::PortAcceptor(boost::asio::io_service& io_service_, Connection_manager& connection_manager_, int port_, std::shared_ptr<Ssl_context_with_password> ssl_context_) 
+        :io_service(io_service_)
+        ,acceptor(0)
+        ,resolver(0)
+        ,port(port_)
+        ,connection_manager(connection_manager_)
+        ,still_alive(new bool(true))
+        ,ssl_context(ssl_context_)
+    {}
+    
+    template <class Connection_type>
+    void PortAcceptor<Connection_type>::handle_handshake(copyable_unique_ptr<Connection_type> connection, const boost::system::error_code& error_code, std::weak_ptr<bool> alive) {
+        if (alive.expired()) return;
+        if (!error_code) {
+            Connection_type* pConnection = connection.release();
+            connection_manager.accepted(pConnection);
+            pConnection->start();
+        } else {
+            connection_manager.error(error_code);
+        }
+    }
+    
+#else
+    template <class Connection_type>
+    PortAcceptor<Connection_type>::PortAcceptor(boost::asio::io_service& io_service_, Connection_manager& connection_manager_, int port_) 
+        :io_service(io_service_)
+        ,acceptor(0)
+        ,resolver(0)
+        ,port(port_)
+        ,connection_manager(connection_manager_)
+        ,still_alive(new bool(true))
+    {}
+#endif
 
 template <class Connection_type>
 void PortAcceptor<Connection_type>::start() {
@@ -109,41 +144,6 @@ template <class Connection_type>
 boost::asio::io_service& PortAcceptor<Connection_type>::get_io_service() {
     return io_service;
 }
-
-#ifdef USE_SSL
-    template <class Connection_type>
-    PortAcceptor<Connection_type>::PortAcceptor(boost::asio::io_service& io_service_, Connection_manager& connection_manager_, int port_, std::shared_ptr<Ssl_context_with_password> ssl_context_) 
-        :io_service(io_service_)
-        ,connection_manager(connection_manager_)
-        ,ssl_context(ssl_context_)
-        ,port(port_)
-        ,acceptor(0)
-        ,resolver(0)
-        ,still_alive(new bool(true))
-    {}
-    
-    template <class Connection_type>
-    void PortAcceptor<Connection_type>::handle_handshake(copyable_unique_ptr<Connection_type> connection, const boost::system::error_code& error_code, std::weak_ptr<bool> alive) {
-        if (alive.expired()) return;
-        if (!error_code) {
-            Connection_type* pConnection = connection.release();
-            connection_manager.accepted(pConnection);
-            pConnection->start();
-        } else {
-            connection_manager.error(error_code);
-        }
-    }
-    
-#else
-    template <class Connection_type>
-    PortAcceptor<Connection_type>::PortAcceptor(boost::asio::io_service& io_service_, Connection_manager& connection_manager_, int port_) 
-        :io_service(io_service_)
-        ,connection_manager(connection_manager_)
-        ,port(port_)
-        ,acceptor(0)
-        ,still_alive(new bool(true))
-    {}
-#endif
 
 template <class Connection_type>
 void PortAcceptor<Connection_type>::handle_resolve(const boost::system::error_code& error_code, tcp::resolver::iterator endpoint_iterator, std::weak_ptr<bool> alive) {

@@ -29,7 +29,8 @@ include_directories ( fanel )
 INSTALL(FILES ${headers} DESTINATION include/fanel)
 INSTALL(FILES ${implementation} DESTINATION include/fanel)
 
-set(CMAKE_CXX_FLAGS "-std=c++0x")
+#set(CMAKE_CXX_COMPILER "/usr/bin/clang++")
+set(CMAKE_CXX_FLAGS "-Wall -pedantic -std=c++0x")
 
 CONFIGURE_FILE (${CMAKE_CURRENT_SOURCE_DIR}/fanel.pc.cmake ${CMAKE_CURRENT_SOURCE_DIR}/fanel.pc)
 FILE(GLOB pkgconf "${CMAKE_CURRENT_SOURCE_DIR}/fanel.pc")

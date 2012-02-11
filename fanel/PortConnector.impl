@@ -67,18 +67,18 @@ class PortConnector {
                         tcp::resolver::iterator next_endpoint_iterator, 
                         std::weak_ptr<bool> alive);
 
-    #ifdef USE_SSL
-        void handle_handshake(copyable_unique_ptr<Connection_type> connection, const boost::system::error_code& error_code, std::weak_ptr<bool> alive);
-        std::shared_ptr<Ssl_context_with_password> ssl_context;
-    #endif
-
-    Connection_manager& connection_manager;
     boost::asio::io_service& io_service;
+    Connection_manager& connection_manager;
     tcp::resolver* resolver;
     int port;
     std::string server;
     std::function<void()> connected_callback;
     std::shared_ptr<bool> still_alive;
+
+    #ifdef USE_SSL
+        void handle_handshake(copyable_unique_ptr<Connection_type> connection, const boost::system::error_code& error_code, std::weak_ptr<bool> alive);
+        std::shared_ptr<Ssl_context_with_password> ssl_context;
+    #endif
 };
 
 //implementation
@@ -102,12 +102,12 @@ PortConnector<Connection_type>::~PortConnector() {
             std::shared_ptr<Ssl_context_with_password> ssl_context_)
         :io_service(io_service_)
         ,connection_manager(connection_manager_)
-        ,ssl_context(ssl_context_)
-        ,port(port_)
-        ,connected_callback(connected_callback_)
-        ,server(server_)
         ,resolver(0)
+        ,port(port_)
+        ,server(server_)
+        ,connected_callback(connected_callback_)
         ,still_alive(new bool(true))
+        ,ssl_context(ssl_context_)
     {}
     
     template <class Connection_type>
@@ -133,10 +133,10 @@ PortConnector<Connection_type>::~PortConnector() {
                 std::function<void()> connected_callback_)
         :io_service(io_service_)
         ,connection_manager(connection_manager_)
-        ,port(port_)
-        ,connected_callback(connected_callback_)
-        ,server(server_)
         ,resolver(0)
+        ,port(port_)
+        ,server(server_)
+        ,connected_callback(connected_callback_)
         ,still_alive(new bool(true))
     {}
 #endif  

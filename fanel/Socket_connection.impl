@@ -51,23 +51,23 @@ custom_network_error_category Socket_connection<SocketType>::cat;
       template<class SocketType>
       Socket_connection<SocketType>::Socket_connection(asio::io_service& io_service, asio::ssl::context& context, Connection_manager& connection_manager_)
         :Connection(connection_manager_)
-        ,socket_(io_service, context) 
-        ,m_readbuf(0) 
-        ,still_alive(new bool(true))
         #ifdef DELIMITER
             ,read_progress(0)
         #endif
+        ,socket_(io_service, context) 
+        ,m_readbuf(0) 
+        ,still_alive(new bool(true))
       {}
   #else
       template<class SocketType>
       Socket_connection<SocketType>::Socket_connection(boost::asio::io_service& io_service, Connection_manager& connection_manager_)
         :Connection(connection_manager_)
-        ,socket_(io_service) 
-        ,m_readbuf(0)
-        ,still_alive(new bool(true))
         #ifdef DELIMITER
             ,read_progress(0)
         #endif
+        ,socket_(io_service) 
+        ,m_readbuf(0)
+        ,still_alive(new bool(true))
       {}
   #endif
 
