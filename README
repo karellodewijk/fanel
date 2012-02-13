@@ -86,14 +86,13 @@ And you can call the functions
     8) coid stop_accept(int port);
     
 1: This function is called when a connection is accepted. You must take ownership of the connection. If you do not store it somewhere and delete it when you no longer need it, you will create a leak.
-2: This function is called when an error happened on a particular connection, such as a disconnect, but many others. This just receives all error codes messages boost asio generates and Maximum message size exceeded.
-   We assume in the client here, the error is not recoverable and delete the connection
+2: This function is called when an error happened on a particular connection, such as a disconnect, but many others. This just receives all error codes messages boost asio generates and Maximum message size exceeded. We assume in the client here, the error is not recoverable and delete the connection
 3: This function is called whenever a connection receives a message. If you use the accompanying client code. Messages written to a connection at one side will come out at the other side unaffected
 4: Also the acceptor itself can receives an error. These errors are generally non-fatal, such as unable to bind or a particular accept failed, so we ignore them here.
-5: A connection has emptied his write queue.
-6: Write to a particular connection, note that you can also use the connection pointer and call write on that write(connection, "hello", 5) is equivalent to connection->write("hello", 5);
+5: A connection has emptied it's write queue.
+6: Write to a particular connection, note that you can also use the connection pointer and call write on that write(connection, "hello", 5) is equivalent to connection->write("hello", 5); The api will copy the data and send it asynchronously, so you do not have to keep the data buffer intact.
 7: Start accepting connection on the given port.
-8: Stop accepting connection from a port from now on. Allready accepted connections will not be dropped.
+8: Stop accepting connection from a port from now on. Already accepted connections will not be dropped.
 
 This is all there is to creating a high performance asynchronous network application.
 
@@ -219,7 +218,7 @@ The first is DELIMITER (in g++, use -DDELIMITER=\"::\" for a :: delimiter). If y
 
 The second compile flag is NETSTRING (-DNETSTRING). If defined, the library will use NETSTRING encoding, read http://en.wikipedia.org/wiki/Netstring. 
 
-The Third is STREAMING (-DSTREAMING). If defined, the library will send data to the application as soon as it arrives. In this mode, no framing will be done. Note that this means that data send at one end can arrive at the other end in different size blocks. The total data stream will however arrive in order and exactly as it was sent.
+The Third is STREAMING (-DSTREAMING). If defined, the library will send data to the application as soon as it arrives. In this mode, no framing will be done. Note that this means that data send at one end can arrive at the other end in different sized blocks. The total data stream will however arrive in order and exactly as it was sent.
 
 Socket options
 ---------------
@@ -261,22 +260,16 @@ Compile flags:
   Threads:
   
     THREADSAFE 
-        If you define this it will make multithread access to the library safe. To actually make event handling multihreaded,
-        use a single io_service and a thread pool calling io_service::run().
+        If you define this it will make multithread access to the library safe. To actually make event handling multihreaded, use a single io_service and a thread pool calling io_service::run().
         
-        Note: Different Acceptors/Connectors with a different io_service can be used in different threads without
-              the need to compile the code THREADSAFE.
+        Note: Different Acceptors/Connectors with a different io_service can be used in different threads without the need to compile the code THREADSAFE.
               
-        Note: Because all io-calls in the memory are asynchronous, you might not need to enable threading. Boost asio
-              in asynchronous mode can service a lot of simultaniously connected sockets from a single thread.
+        Note: Because all io-calls are guaranteed asynchronous, you might not need to enable threading. Boost asio in asynchronous mode can service a lot of simultaniously connected sockets from a single thread.
 
   Network framing:
   
     DELIMITER=\":\"  
-        Instead of the default length prefix framing, the network code will use the given delimiter. Note that 
-        intermediate delimiters are not automatically escaped. When receiving the message, the delimiter is not
-        included in the size, but you may assume it is present in the buffer if you read past the end of the 
-        message.
+        Instead of the default length prefix framing, the network code will use the given delimiter. Note that intermediate delimiters are not automatically escaped. When receiving the message, the delimiter is not included in the size, but you may assume it is present in the buffer if you read past the end of the message.
     NETSTRING
         Instead of the default length prefix, the network code will use NETSTRING encoding, see http://en.wikipedia.org/wiki/Netstring
     STREALING
@@ -285,19 +278,12 @@ Compile flags:
   Parameters:
     
     MAX_MESSAGE_SIZE=number_in_bytes
-        It is wise to define an upper limit to the size of any message. if you do not do this, you will
-        leave your connection vulnerable to DOS attacks. Malicious users just have to send you 1 or a few
-        insanely large messages and your application will run out of memory.
+        It is wise to define an upper limit to the size of any message. if you do not do this, you will leave your connection vulnerable to DOS attacks. Malicious users just have to send you 1 or a few insanely large messages and your application will keep buffereing them and eventually run out of memory. If the size of any message however execeeds this value an error will be reported and you can disconnect to free the memory.
         
-        NOTE: It is recommended to define this, the default is 1GB, which is probably much larger than desirable.
-              The algorithms here are copy once, so it is possible the memory usage of any connection can increase
-              to twice this amount.
+        NOTE: It is recommended to define this for servers, the default is 1GB, which is probably much larger than desirable. The algorithms here are copy once, so it is possible the memory usage of any one connection can increase to twice this amount. 
     
     DEFAULT_BUFFER_SIZE=number_in_bytes
-        Only used with delimiter based framing. This is the initial size of the read buffer. Buffer size will
-        increase if larger messages appear and shrink again over time to this value. Even if your messages are
-        only small, it will improve performance if you increase this value as we use a semi-rotating read buffer
-        protocol and the less rotating the better.
+        Only used with delimiter based framing. This is the initial size of the read buffer. Buffer size will increase if larger messages appear and shrink again over time to this value. Even if your messages are only small, it will improve performance if you increase this value as we use a semi-rotating read buffer protocol and the less rotating the better.
                  
   Extras:
 
